@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "blueiris-alerts-server"
+version = "0.1.0"
+description = ""
+authors = ["wymangr"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pydantic-settings = "2.0.0"
+pydantic = "2.4.2"
+requests = "2.31.0"
+fastapi = "0.104.0"
+slack-sdk = "3.23.0"
+uvicorn = {version = "0.23.2", extras = ["standard"]}
+gunicorn = "^21.2.0"
+psutil = "5.9.6"
+python-multipart = "0.0.6"
+
+[tool.poetry.group.dev.dependencies]
+black = "^23.10.1"
+ruff = "^0.1.3"
+poethepoet = "^0.24.1"
+
+[tool.poe.tasks]
+run = { shell = "uvicorn app:app --host 0.0.0.0 --port 8000 --reload" }
+format = { shell = "black ." }
+lint = { shell = "ruff ." }
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
