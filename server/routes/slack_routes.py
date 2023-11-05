@@ -15,7 +15,7 @@ from blueiris_alerts.server.slack.messages import response_url_post
 from blueiris_alerts.server.blueiris.blueiris_camconfig import pause
 from blueiris_alerts.utils.utils import get_blueiris_auth_url
 
-router = APIRouter(prefix="/playground", tags=["slack"])
+router = APIRouter(prefix="/blueiris_alerts", tags=["slack"])
 
 SETTINGS = get_settings("server")
 

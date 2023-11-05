@@ -84,9 +84,9 @@ def send_alert(camera: str, path: str, slack_client: slack.WebClient, memo: str)
     )
     image_url = f"{image_base_url}/file/clips/{path}"
 
-    recording_url = f"{SETTINGS.server_url}/playground/clips?alert={path}&key={encode(SETTINGS.encryption_password, path)}"
+    recording_url = f"{SETTINGS.server_url}/blueiris_alerts/clips?alert={path}&key={encode(SETTINGS.encryption_password, path)}"
     view_recording_link = f"<{recording_url}|```View Recording```>"
-    live_feed_url = f"{SETTINGS.server_url}/playground/live_feed?alert={path}&camera={camera}&key={encode(SETTINGS.encryption_password, path)}"
+    live_feed_url = f"{SETTINGS.server_url}/blueiris_alerts/live_feed?alert={path}&camera={camera}&key={encode(SETTINGS.encryption_password, path)}"
 
     blocks = slack_schema.MessageSchema(
         blocks=[

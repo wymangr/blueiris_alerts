@@ -10,13 +10,15 @@ Current supported clients:
 4. Publicly accessible Blue Iris web server (via port forward and/or proxy)
 
 ### Server
-[Server](/server/README.md)
+[Server Documentation](/server/README.md)
+APIs for interacting with the alert. Pause button, live feed, recording.
 
 ### Client
-[Server](/client/README.md)
+Python script to execute from BlueIris to send the alert.
+[Client Documentation](/client/README.md)
 
 ### todo:
 - Add More Documentation
 - Tests
 - Logging
-- Docker Server Setup
+- Error Handling

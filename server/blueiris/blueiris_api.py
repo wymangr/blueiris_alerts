@@ -22,6 +22,7 @@ def blueiris_json_login():
     session_id = session.post(blueiris_url, headers=headers, data=data).json()[
         "session"
     ]
+        
     response = hashlib.md5(
         f"{SETTINGS.blueiris_api_user}:{session_id}:{SETTINGS.blueiris_api_password}".encode(
             "utf-8"

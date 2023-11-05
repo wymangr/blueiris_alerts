@@ -1,0 +1,12 @@
+version: '3.6'
+services:
+
+  blueisis_alerts:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    container_name: blueisis_alerts
+    volumes:
+      - ./server/.env/:/opt/blueisis_alerts/server/.env
+    ports:
+      - 8000:8560

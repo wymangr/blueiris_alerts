@@ -1,6 +1,6 @@
 # Server 
 
-### WSL Setup
+## WSL Setup
 Install Ubuntu From the Microsoft Store
 Start Ubuntu Shell:
 
@@ -26,5 +26,13 @@ poetry install
 poetry shell
 ```
 
-### todo:
+### Forwarding Port Through WSL
+Ubuntu WSL: `ifconfig` (copy IP)
+`netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=8560 connectaddress=<WSL_IP> connectport=8560`
+`netsh advfirewall firewall add rule name="WSL" dir=in action=allow protocol=TCP localport=8560`
+
+## Docker Setup
+todo
+
+## todo:
 - Add More Server Documentation
