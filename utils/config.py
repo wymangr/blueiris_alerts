@@ -1,10 +1,13 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
+import pathlib
 
 
 class ServerSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        env_file=f"{pathlib.Path(__file__).parent.resolve().parent}/server/.env",
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     encryption_password: str
@@ -18,7 +21,9 @@ class ServerSettings(BaseSettings):
 
 class ClientSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        env_file=f"{pathlib.Path(__file__).parent.resolve().parent}/client/.env",
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     encryption_password: str
