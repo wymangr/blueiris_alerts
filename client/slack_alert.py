@@ -74,8 +74,14 @@ def auth_image_url(base_url: str, user: str, password: str, index: int):
     return f"{base_url[:index]}{user}:{password}@{base_url[index:]}"
 
 
-def send_alert(camera: str, path: str, slack_client: slack.WebClient, memo: str):
-    message_text = f"{camera} alert! {memo}"
+def send_alert(
+    camera: str, camera_full: str, path: str, slack_client: slack.WebClient, memo: str
+):
+    if camera_full:
+        alerting_camera = camera_full
+    else:
+        alerting_camera = camera
+    message_text = f"{alerting_camera} alert! {memo}"
 
     image_base_url = get_blueiris_auth_url(
         SETTINGS.blueiris_web_url,
@@ -98,7 +104,7 @@ def send_alert(camera: str, path: str, slack_client: slack.WebClient, memo: str)
             slack_schema.SelectionBlock(
                 type="section",
                 text=slack_schema.Text(
-                    text=f"Pause the {camera} camera for 30 min?", emoji=True
+                    text=f"Pause the {alerting_camera} camera for 30 min?", emoji=True
                 ),
             ),
             slack_schema.ActionBlock(
@@ -110,15 +116,15 @@ def send_alert(camera: str, path: str, slack_client: slack.WebClient, memo: str)
                         options=[
                             slack_schema.Options(
                                 text=slack_schema.Text(text="Pause 30m"),
-                                value=f"pause,1800,{path},{encode(SETTINGS.encryption_password, path)}",
+                                value=f"{alerting_camera},pause,1800,{path},{encode(SETTINGS.encryption_password, path)}",
                             ),
                             slack_schema.Options(
                                 text=slack_schema.Text(text="Pause 1h"),
-                                value=f"pause,3600,{path},{encode(SETTINGS.encryption_password, path)}",
+                                value=f"{alerting_camera},pause,3600,{path},{encode(SETTINGS.encryption_password, path)}",
                             ),
                             slack_schema.Options(
                                 text=slack_schema.Text(text="Pause 6h"),
-                                value=f"pause,21600,{path},{encode(SETTINGS.encryption_password, path)}",
+                                value=f"{alerting_camera},pause,21600,{path},{encode(SETTINGS.encryption_password, path)}",
                             ),
                         ],
                     )
@@ -160,6 +166,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-c", "--camera", required=True, help="Alerting Camera Short Name"
     )
+    parser.add_argument("-C", "--camera_full", help="Alerting Camera Full Name")
     parser.add_argument(
         "-p",
         "--path",
@@ -197,6 +204,7 @@ if __name__ == "__main__":
     config = vars(args)
 
     alerting_camera = config["camera"]
+    alerting_camera_full = config["camera_full"]
     alert_path = config["path"]
     memo = config["memo"]
     mqtt_true = config["mqtt"]
@@ -221,7 +229,7 @@ if __name__ == "__main__":
         assert alert_path is not None, "--path is required"
 
         update_old(alerting_camera, client)
-        send_alert(alerting_camera, alert_path, client, memo)
+        send_alert(alerting_camera, alerting_camera_full, alert_path, client, memo)
 
         if mqtt_true:
             assert all(

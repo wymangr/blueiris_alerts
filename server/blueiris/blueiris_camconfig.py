@@ -28,16 +28,3 @@ def pause(action: str, camera: str, duration: str = None):
     blueiris_api.blueiris_json_logout(session, session_id)
 
     return camconfig_pause
-
-
-## 1 = 30s
-## 2 = 5m
-## 3 = 30m
-## 4 = 1h
-## 5 = 2h
-## 6 = 3h
-## 7 = 5h
-## 8 = 10h
-## 9 = 24h
-## 10 = 15m
-## -1 = indefinitely

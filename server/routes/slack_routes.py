@@ -36,10 +36,14 @@ async def interactivity(
         button_selection = payload.actions[0].selected_option.value.split(",")
     else:
         button_selection = payload.actions[0].value.split(",")
-    action = button_selection[0]
+    action = button_selection[1]
     camera = payload.actions[0].action_id
+    camera_full = button_selection[0]
 
-    if button_selection[2] != decode(SETTINGS.encryption_password, button_selection[3]):
+    print(button_selection[3])
+    print(button_selection[4])
+
+    if button_selection[3] != decode(SETTINGS.encryption_password, button_selection[4]):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     if action == "pause":
@@ -48,17 +52,19 @@ async def interactivity(
             action,
             payload.message.blocks,
             camera,
-            button_selection[2],
+            camera_full,
             button_selection[3],
+            button_selection[4],
             payload.response_url,
         )
-        pause_sec = button_selection[1]
+        pause_sec = button_selection[2]
         sp.Popen(
             [
                 sys.executable,
                 "slack/pause_timer.py",
                 payload.message.ts,
                 camera,
+                camera_full,
                 payload.channel.id,
                 pause_sec,
             ]
@@ -70,11 +76,12 @@ async def interactivity(
             action,
             payload.message.blocks,
             camera,
-            button_selection[2],
+            camera_full,
             button_selection[3],
+            button_selection[4],
             payload.response_url,
         )
-        p = psutil.Process(int(button_selection[4]))
+        p = psutil.Process(int(button_selection[5]))
         p.terminate()
 
     elif action == "add":
@@ -83,12 +90,13 @@ async def interactivity(
             action,
             payload.message.blocks,
             camera,
-            button_selection[2],
+            camera_full,
             button_selection[3],
+            button_selection[4],
             payload.response_url,
         )
-        pause_sec = button_selection[1]
-        p = psutil.Process(int(button_selection[4]))
+        pause_sec = button_selection[2]
+        p = psutil.Process(int(button_selection[5]))
         p.terminate()
         sp.Popen(
             [
@@ -96,6 +104,7 @@ async def interactivity(
                 "slack/pause_timer.py",
                 payload.message.ts,
                 camera,
+                camera_full,
                 payload.channel.id,
                 pause_sec,
             ]

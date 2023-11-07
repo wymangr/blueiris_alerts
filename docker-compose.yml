@@ -9,4 +9,4 @@ services:
     volumes:
       - ./server/.env/:/opt/blueisis_alerts/server/.env
     ports:
-      - 8000:8560
+      - 8560:8560

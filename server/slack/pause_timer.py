@@ -15,8 +15,9 @@ password = "secret"
 if __name__ == "__main__":
     message_ts = sys.argv[1]
     camera = sys.argv[2]
-    channel = sys.argv[3]
-    pause_sec = int(sys.argv[4])
+    camera_full = sys.argv[3]
+    channel = sys.argv[4]
+    pause_sec = int(sys.argv[5])
 
     timer_pid = os.getpid()
     clear_time = datetime.now() + timedelta(seconds=pause_sec)
@@ -27,24 +28,26 @@ if __name__ == "__main__":
     blocks = MessageSchema(blocks=message["blocks"])
 
     pause_values = blocks.blocks[4].elements[0].value.split(",")
-    path = pause_values[2]
-    key = pause_values[3]
+    path = pause_values[3]
+    key = pause_values[4]
 
     while clear_time > datetime.now():
         seconds = int((clear_time - datetime.now()).seconds)
         minutes = int(seconds / 60)
 
         blocks.blocks[4].elements[0].text.text = f"Start ({minutes} min)"
-        blocks.blocks[4].elements[0].value = f"start,0,{path},{key},{timer_pid}"
+        blocks.blocks[4].elements[
+            0
+        ].value = f"{camera_full},start,0,{path},{key},{timer_pid}"
         blocks.blocks[5].elements[0].options[
             0
-        ].value = f"add,{1800+seconds},{path},{key},{timer_pid}"
+        ].value = f"{camera_full},add,{1800+seconds},{path},{key},{timer_pid}"
         blocks.blocks[5].elements[0].options[
             1
-        ].value = f"add,{3600+seconds},{path},{key},{timer_pid}"
+        ].value = f"{camera_full},add,{3600+seconds},{path},{key},{timer_pid}"
         blocks.blocks[5].elements[0].options[
             2
-        ].value = f"add,{21600+seconds},{path},{key},{timer_pid}"
+        ].value = f"{camera_full},add,{21600+seconds},{path},{key},{timer_pid}"
 
         client.chat_update(
             channel=channel,
@@ -53,7 +56,9 @@ if __name__ == "__main__":
             text="updated",
         )
         time.sleep(60)
-    new_blocks = update_blocks_pause("start", blocks.blocks, camera, path, key)
+    new_blocks = update_blocks_pause(
+        "start", blocks.blocks, camera, camera_full, path, key
+    )
 
     client.chat_update(
         channel=channel,
