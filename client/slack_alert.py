@@ -154,7 +154,7 @@ def send_alert(
 def mqtt_message(camera: str, status: str):
     try:
         mqtt_client = mqtt.Client()
-        mqtt_client.username_pw_set(SETTINGS.mqtt_user, SETTINGS.mqtt_pw)
+        mqtt_client.username_pw_set(SETTINGS.mqtt_user, SETTINGS.mqtt_password)
         mqtt_client.connect(SETTINGS.mqtt_broker, 1883, 60)
         mqtt_client.publish(f"camera_alerts/{camera}", status)
     except Exception as e:
