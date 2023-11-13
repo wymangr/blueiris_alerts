@@ -1,5 +1,4 @@
 import argparse
-import paho.mqtt.client as mqtt
 import slack_sdk as slack
 
 from pydantic import ValidationError
@@ -151,16 +150,6 @@ def send_alert(
     )
 
 
-def mqtt_message(camera: str, status: str):
-    try:
-        mqtt_client = mqtt.Client()
-        mqtt_client.username_pw_set(SETTINGS.mqtt_user, SETTINGS.mqtt_password)
-        mqtt_client.connect(SETTINGS.mqtt_broker, 1883, 60)
-        mqtt_client.publish(f"camera_alerts/{camera}", status)
-    except Exception as e:
-        print(e)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -173,19 +162,7 @@ if __name__ == "__main__":
         help="Name of Alert jpg. Can be passed in via BI Variable: `&ALERT_PATH`",
     )
     parser.add_argument(
-        "-M", "--memo", help="AI memo. Can be passed in via BI Variable: `&MEMO`"
-    )
-    parser.add_argument(
-        "-m",
-        "--mqtt",
-        action="store_true",
-        help="Option to send motion message to MQTT server",
-    )
-    parser.add_argument(
-        "-mr",
-        "--mqtt_reset",
-        action="store_true",
-        help="Option to send no motion message to MQTT server. 'on reset'",
+        "-m", "--memo", help="AI memo. Can be passed in via BI Variable: `&MEMO`"
     )
     parser.add_argument(
         "-o",
@@ -207,8 +184,6 @@ if __name__ == "__main__":
     alerting_camera_full = config["camera_full"]
     alert_path = config["path"]
     memo = config["memo"]
-    mqtt_true = config["mqtt"]
-    mqtt_reset = config["mqtt_reset"]
     offline = config["offline"]
     online = config["online"]
 
@@ -220,19 +195,8 @@ if __name__ == "__main__":
             watchdog_alert(alerting_camera, "offline", client)
         elif online:
             watchdog_alert(alerting_camera, "online", client)
-    elif mqtt_reset:
-        assert all(
-            (SETTINGS.mqtt_broker, SETTINGS.mqtt_user, SETTINGS.mqtt_password)
-        ), "Missing MQTT configuration"
-        mqtt_message(alerting_camera, "no_motion")
     else:
         assert alert_path is not None, "--path is required"
 
         update_old(alerting_camera, client)
         send_alert(alerting_camera, alerting_camera_full, alert_path, client, memo)
-
-        if mqtt_true:
-            assert all(
-                (SETTINGS.mqtt_broker, SETTINGS.mqtt_user, SETTINGS.mqtt_password)
-            ), "Missing MQTT configuration"
-            mqtt_message(alerting_camera, "motion")

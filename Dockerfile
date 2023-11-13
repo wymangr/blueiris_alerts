@@ -26,6 +26,8 @@ RUN curl -sSL https://install.python-poetry.org | POETRY_VERSION=${POETRY_VERSIO
 ADD server /opt/blueiris_alerts/server
 ADD utils /opt/blueiris_alerts/utils
 ADD schemas /opt/blueiris_alerts/schemas
+COPY pyproject.toml /opt/blueiris_alerts/server
+COPY poetry.lock /opt/blueiris_alerts/server
 
 WORKDIR /opt/blueiris_alerts/server
 

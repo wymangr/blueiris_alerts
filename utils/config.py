@@ -1,5 +1,4 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional
 import pathlib
 
 
@@ -35,10 +34,6 @@ class ClientSettings(BaseSettings):
     blueiris_web_url: str
     blueiris_api_user: str
     blueiris_api_password: str
-
-    mqtt_broker: Optional[str] = None
-    mqtt_user: Optional[str] = None
-    mqtt_password: Optional[str] = None
 
 
 def get_settings(setting: str):
