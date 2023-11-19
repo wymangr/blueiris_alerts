@@ -16,7 +16,9 @@ def watchdog_alert(camera: str, status: str, slack_client: slack.WebClient):
     slack_client.chat_postMessage(text=message_text, channel=SETTINGS.slack_channel)
 
 
-def remove_message_blocks(removed_message_blocks: dict, channel: str):
+def remove_message_blocks(
+    removed_message_blocks: dict, channel: str, slack_client: slack.WebClient
+):
     if removed_message_blocks:
         for message_timestamp in removed_message_blocks:
             blocks = removed_message_blocks[message_timestamp]["blocks"]
@@ -24,7 +26,7 @@ def remove_message_blocks(removed_message_blocks: dict, channel: str):
             blocks.pop(4)
             blocks.pop(3)
 
-            client.chat_update(
+            slack_client.chat_update(
                 channel=channel, blocks=blocks, ts=message_timestamp, text="updated"
             )
 
@@ -43,13 +45,16 @@ def update_old(camera: str, slack_client: slack.WebClient):
         channel_id = get_channel_id(channels)
         if not channel_id:
             print("unable to get channel id")
-            return
+            return False
         messages = slack_client.conversations_history(channel=channel_id, count=10).data
         if not messages["ok"]:
             print("unable to update old messages")
-            return
+            return False
         removed_message_blocks = {}
         for message in messages["messages"]:
+            print(message)
+            print(message.keys())
+            print(len(message["blocks"]))
             if "blocks" in message.keys() and len(message["blocks"]) == 7:
                 try:
                     message_block = slack_schema.MessageSchema(blocks=message["blocks"])
@@ -64,13 +69,14 @@ def update_old(camera: str, slack_client: slack.WebClient):
                 except ValidationError:
                     print("Failed Validation")
                     continue
-        remove_message_blocks(removed_message_blocks, channel_id)
+        remove_message_blocks(removed_message_blocks, channel_id, slack_client)
+        return True
     except Exception as e:
+        import traceback
+
+        print(traceback.format_exc())
         print(e)
-
-
-def auth_image_url(base_url: str, user: str, password: str, index: int):
-    return f"{base_url[:index]}{user}:{password}@{base_url[index:]}"
+        return False
 
 
 def send_alert(
@@ -82,12 +88,12 @@ def send_alert(
         alerting_camera = camera
     message_text = f"{alerting_camera} alert! {memo}"
 
-    image_base_url = get_blueiris_auth_url(
+    image_url = get_blueiris_auth_url(
         SETTINGS.blueiris_web_url,
         SETTINGS.blueiris_api_user,
         SETTINGS.blueiris_api_password,
+        f"/file/clips/{path}",
     )
-    image_url = f"{image_base_url}/file/clips/{path}"
 
     recording_url = f"{SETTINGS.server_url}/blueiris_alerts/clips?alert={path}&key={encode(SETTINGS.encryption_password, path)}"
     view_recording_link = f"<{recording_url}|```View Recording```>"

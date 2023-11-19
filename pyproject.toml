@@ -21,11 +21,29 @@ python-multipart = "0.0.6"
 black = "^23.10.1"
 ruff = "^0.1.3"
 poethepoet = "^0.24.1"
+httpx = "0.25.1"
+pytest = "7.4.3"
+pytest-mock = "3.12.0"
+pytest-dotenv = "0.5.2"
+pytest-cov = "4.1.0"
+aiohttp = "3.8.6"
+
+[tool.pytest.ini_options]
+env_override_existing_values = "1"
+env_files = [
+    ".test.env"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "if __name__ == .__main__.:"
+]
 
 [tool.poe.tasks]
 run_server = { shell = "uvicorn server.app:app --host 0.0.0.0 --port 8560 --reload" }
 format = { shell = "black ." }
 lint = { shell = "ruff ." }
+test = { shell = "pytest . --cov" }
 
 [build-system]
 requires = ["poetry-core"]

@@ -3,17 +3,14 @@ import psutil
 import subprocess as sp
 
 from fastapi import APIRouter, Form, Header, HTTPException
-from fastapi.responses import RedirectResponse, StreamingResponse
 from typing import Annotated
 from pydantic import Json
 
 from blueiris_alerts.schemas.slack_schema import SlackInteractivity
 from blueiris_alerts.utils.config import get_settings
 from blueiris_alerts.utils.key import decode
-from blueiris_alerts.server.blueiris.blueiris_clip import get_clip
 from blueiris_alerts.server.slack.messages import response_url_post
 from blueiris_alerts.server.blueiris.blueiris_camconfig import pause
-from blueiris_alerts.utils.utils import get_blueiris_auth_url
 
 router = APIRouter(prefix="/blueiris_alerts", tags=["slack"])
 
@@ -39,9 +36,6 @@ async def interactivity(
     action = button_selection[1]
     camera = payload.actions[0].action_id
     camera_full = button_selection[0]
-
-    print(button_selection[3])
-    print(button_selection[4])
 
     if button_selection[3] != decode(SETTINGS.encryption_password, button_selection[4]):
         raise HTTPException(status_code=401, detail="Unauthorized")
@@ -113,29 +107,29 @@ async def interactivity(
     return {"status": "success"}
 
 
-@router.get("/clips")
-async def clips(alert: str, key: str, referer: Annotated[str | None, Header()] = None):
-    if referer != "android-app://com.slack/" or alert != decode(
-        SETTINGS.encryption_password, key
-    ):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return StreamingResponse(
-        get_clip(alert), media_type="multipart/x-mixed-replace; boundary=frame"
-    )
+# @router.get("/clips")
+# async def clips(alert: str, key: str, referer: Annotated[str | None, Header()] = None):
+#     if referer != "android-app://com.slack/" or alert != decode(
+#         SETTINGS.encryption_password, key
+#     ):
+#         raise HTTPException(status_code=401, detail="Unauthorized")
+#     return StreamingResponse(
+#         get_clip(alert), media_type="multipart/x-mixed-replace; boundary=frame"
+#     )
 
 
-@router.get("/live_feed")
-async def live_feed(
-    alert: str, camera: str, key: str, referer: Annotated[str | None, Header()] = None
-):
-    if referer != "android-app://com.slack/" or alert != decode(
-        SETTINGS.encryption_password, key
-    ):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+# @router.get("/live_feed")
+# async def live_feed(
+#     alert: str, camera: str, key: str, referer: Annotated[str | None, Header()] = None
+# ):
+#     if referer != "android-app://com.slack/" or alert != decode(
+#         SETTINGS.encryption_password, key
+#     ):
+#         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    live_feed_url = get_blueiris_auth_url(
-        SETTINGS.blueiris_web_url,
-        SETTINGS.blueiris_api_user,
-        SETTINGS.blueiris_api_password,
-    )
-    return RedirectResponse(url=f"{live_feed_url}/mjpg/{camera}/video.mjpg")
+#     live_feed_url = get_blueiris_auth_url(
+#         SETTINGS.blueiris_web_url,
+#         SETTINGS.blueiris_api_user,
+#         SETTINGS.blueiris_api_password,
+#     )
+#     return RedirectResponse(url=f"{live_feed_url}/mjpg/{camera}/video.mjpg")
