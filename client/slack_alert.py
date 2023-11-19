@@ -2,6 +2,7 @@ import argparse
 import slack_sdk as slack
 
 from pydantic import ValidationError
+from datetime import datetime
 
 from blueiris_alerts.utils.config import get_settings
 from blueiris_alerts.utils.key import encode
@@ -52,9 +53,6 @@ def update_old(camera: str, slack_client: slack.WebClient):
             return False
         removed_message_blocks = {}
         for message in messages["messages"]:
-            print(message)
-            print(message.keys())
-            print(len(message["blocks"]))
             if "blocks" in message.keys() and len(message["blocks"]) == 7:
                 try:
                     message_block = slack_schema.MessageSchema(blocks=message["blocks"])
@@ -72,9 +70,6 @@ def update_old(camera: str, slack_client: slack.WebClient):
         remove_message_blocks(removed_message_blocks, channel_id, slack_client)
         return True
     except Exception as e:
-        import traceback
-
-        print(traceback.format_exc())
         print(e)
         return False
 
@@ -95,8 +90,9 @@ def send_alert(
         f"/file/clips/{path}",
     )
 
+    now = datetime.now().strftime("%m/%d/%Y %I:%M:%S %p")
     recording_url = f"{SETTINGS.server_url}/blueiris_alerts/clips?alert={path}&key={encode(SETTINGS.encryption_password, path)}"
-    view_recording_link = f"<{recording_url}|```View Recording```>"
+    view_recording_link = f"<{recording_url}|```View Recording```>{now}"
     live_feed_url = f"{SETTINGS.server_url}/blueiris_alerts/live_feed?alert={path}&camera={camera}&key={encode(SETTINGS.encryption_password, path)}"
 
     blocks = slack_schema.MessageSchema(
