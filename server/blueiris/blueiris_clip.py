@@ -1,12 +1,14 @@
 import re
-import urllib
+from urllib.request import urlopen
 import time
 
 from blueiris_alerts.server.blueiris import blueiris_api
+from blueiris_alerts.server.settings import LOGGER
 from blueiris_alerts.utils.exceptions import BlueIrisError
 
 
 def get_clip(alert_clip):
+    LOGGER.debug(f"Getting recording for {alert_clip}")
     session, session_id = blueiris_api.blueiris_json_login()
     clips = blueiris_api.blueiris_command(
         session, session_id, "alertlist", '"camera":"index"'
@@ -33,14 +35,24 @@ def get_clip(alert_clip):
     return gen_clip(clip_path, clip_length)
 
 
+def get_clip_images() -> list:
+    return []
+
+
 def gen_clip(clip_path, clip_length):
-    clip_images = []
+    clip_images = get_clip_images()
     for r in range(200, int(clip_length), 200):
         clip_url = f"{blueiris_api.SETTINGS.blueiris_web_url}/file/clips/{clip_path}?time={r}&user={blueiris_api.SETTINGS.blueiris_api_user}&pw={blueiris_api.SETTINGS.blueiris_api_password}&q={10}"
-        contents = urllib.request.urlopen(clip_url).read()
+        contents = urlopen(clip_url).read()
         clip_images.append(contents)
+
         yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + contents + b"\r\n")
-    while True:
+
+    clip_loop = True
+    while clip_loop:
         for contents in clip_images:
+            if not contents:
+                clip_loop = False
+                break
             time.sleep(0.1)
             yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + contents + b"\r\n")

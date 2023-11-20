@@ -4,6 +4,7 @@ import requests
 from typing import List, Union
 from fastapi import HTTPException
 
+from blueiris_alerts.server.settings import LOGGER
 from blueiris_alerts.schemas.slack_schema import (
     MessageSchema,
     ActionBlock,
@@ -91,7 +92,14 @@ def response_url_post(
     key: str,
     response_url: str,
 ):
+    LOGGER.debug(f"response_url_post - blocks: {blocks}")
+    LOGGER.debug(
+        f"response_url_post - action: {action}, camera: {camera}, camera_full: {camera_full}, path: {path}, response_url: {response_url}"
+    )
+
     updated_blocks = update_blocks_pause(action, blocks, camera, camera_full, path, key)
+
+    LOGGER.debug(f"response_url_post - updated blocks: {updated_blocks}")
 
     data = {"replace_original": "true", "text": "updated", "blocks": updated_blocks}
 

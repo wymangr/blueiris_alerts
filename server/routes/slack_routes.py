@@ -7,14 +7,12 @@ from typing import Annotated
 from pydantic import Json
 
 from blueiris_alerts.schemas.slack_schema import SlackInteractivity
-from blueiris_alerts.utils.config import get_settings
+from blueiris_alerts.server.settings import SETTINGS, LOGGER
 from blueiris_alerts.utils.key import decode
 from blueiris_alerts.server.slack.messages import response_url_post
 from blueiris_alerts.server.blueiris.blueiris_camconfig import pause
 
 router = APIRouter(prefix="/blueiris_alerts", tags=["slack"])
-
-SETTINGS = get_settings("server")
 
 
 @router.post("/interactivity")
@@ -22,17 +20,23 @@ async def interactivity(
     payload: Annotated[Json[SlackInteractivity], Form()],
     user_agent: Annotated[str | None, Header()] = None,
 ):
+    LOGGER.debug(f"/interactivity - payload: {payload}")
+    LOGGER.debug(f"/interactivity - user_agent: {user_agent}")
     if (
         payload.actions[0].type == "button"
         and payload.actions[0].text.text == "View Live Feed"
     ):
         return
+
     if "Slackbot" not in user_agent:
         raise HTTPException(status_code=401, detail="Unauthorized")
+
     if payload.actions[0].type == "static_select":
         button_selection = payload.actions[0].selected_option.value.split(",")
     else:
         button_selection = payload.actions[0].value.split(",")
+    LOGGER.debug(f"/interactivity - button_selection: {button_selection}")
+
     action = button_selection[1]
     camera = payload.actions[0].action_id
     camera_full = button_selection[0]
@@ -41,6 +45,7 @@ async def interactivity(
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     if action == "pause":
+        LOGGER.info(f"/interactivity - Pausing Camera {camera}")
         pause("pause", camera, payload.actions[0].selected_option.text.text)
         response_url_post(
             action,
@@ -65,6 +70,7 @@ async def interactivity(
         )
 
     elif action == "start":
+        LOGGER.info(f"/interactivity - Starting Camera {camera}")
         pause("start", camera)
         response_url_post(
             action,
@@ -79,6 +85,7 @@ async def interactivity(
         p.terminate()
 
     elif action == "add":
+        LOGGER.info(f"/interactivity - Adding Pause to Camera {camera}")
         pause("pause", camera, payload.actions[0].selected_option.text.text)
         response_url_post(
             action,
@@ -105,31 +112,3 @@ async def interactivity(
         )
 
     return {"status": "success"}
-
-
-# @router.get("/clips")
-# async def clips(alert: str, key: str, referer: Annotated[str | None, Header()] = None):
-#     if referer != "android-app://com.slack/" or alert != decode(
-#         SETTINGS.encryption_password, key
-#     ):
-#         raise HTTPException(status_code=401, detail="Unauthorized")
-#     return StreamingResponse(
-#         get_clip(alert), media_type="multipart/x-mixed-replace; boundary=frame"
-#     )
-
-
-# @router.get("/live_feed")
-# async def live_feed(
-#     alert: str, camera: str, key: str, referer: Annotated[str | None, Header()] = None
-# ):
-#     if referer != "android-app://com.slack/" or alert != decode(
-#         SETTINGS.encryption_password, key
-#     ):
-#         raise HTTPException(status_code=401, detail="Unauthorized")
-
-#     live_feed_url = get_blueiris_auth_url(
-#         SETTINGS.blueiris_web_url,
-#         SETTINGS.blueiris_api_user,
-#         SETTINGS.blueiris_api_password,
-#     )
-#     return RedirectResponse(url=f"{live_feed_url}/mjpg/{camera}/video.mjpg")

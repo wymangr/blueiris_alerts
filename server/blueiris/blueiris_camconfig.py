@@ -1,4 +1,5 @@
 from blueiris_alerts.server.blueiris import blueiris_api
+from blueiris_alerts.utils.exceptions import BlueIrisAlertsException
 
 
 def convert_pause_duration(duration: str):
@@ -8,6 +9,10 @@ def convert_pause_duration(duration: str):
         pause_duration = ["4"]
     elif "6h" in duration:
         pause_duration = ["7", "4"]
+    else:
+        raise BlueIrisAlertsException(
+            f"convert_pause_duration expects: 30m, 1h or 6h. Not {duration}"
+        )
     return pause_duration
 
 

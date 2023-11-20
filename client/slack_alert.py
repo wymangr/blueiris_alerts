@@ -5,11 +5,13 @@ from pydantic import ValidationError
 from datetime import datetime
 
 from blueiris_alerts.utils.config import get_settings
+from blueiris_alerts.utils.logger import get_logger
 from blueiris_alerts.utils.key import encode
 from blueiris_alerts.utils.utils import get_blueiris_auth_url
 from blueiris_alerts.schemas import slack_schema
 
 SETTINGS = get_settings("client")
+LOGGER = get_logger(SETTINGS.log_level)
 
 
 def watchdog_alert(camera: str, status: str, slack_client: slack.WebClient):
@@ -188,6 +190,8 @@ if __name__ == "__main__":
     memo = config["memo"]
     offline = config["offline"]
     online = config["online"]
+
+    LOGGER.debug("Running with the following parameters: {config}")
 
     client = slack.WebClient(token=SETTINGS.slack_api_token)
 

@@ -21,6 +21,5 @@ Python script to execute from BlueIris to send the alert.
 
 ### todo:
 - Add More Documentation
-- Logging
 - Error Handling
 - Github Action

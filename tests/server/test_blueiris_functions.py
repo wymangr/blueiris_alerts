@@ -70,3 +70,39 @@ def test_blueiris_clip(mocker: MockFixture):
 
     blueiris_command_mock.blueiris_command.return_value = command_m
     blueiris_clip.get_clip(test_alert_clip)
+
+
+def test_gen_clip(mocker: MockFixture):
+    test_clips = [b"content1", b"content2", False]
+
+    expected_prefix = b"--frame\r\nContent-Type: image/jpeg\r\n\r\n"
+    expected_output_loop = [
+        expected_prefix + b"content1" + b"\r\n",
+        expected_prefix + b"content2" + b"\r\n",
+    ]
+
+    expected_output = [expected_prefix + b"content3" + b"\r\n"]
+
+    urllib_mock = mocker.patch("blueiris_alerts.server.blueiris.blueiris_clip.urlopen")
+    urllib_mock.return_value.read.return_value = b"content3"
+
+    clip_images_mock = mocker.patch(
+        "blueiris_alerts.server.blueiris.blueiris_clip.get_clip_images"
+    )
+    clip_images_mock.return_value = [False]
+
+    test_gen_clip = blueiris_clip.gen_clip("path", 400)
+    assert list(test_gen_clip) == expected_output
+
+    clip_images_mock = mocker.patch(
+        "blueiris_alerts.server.blueiris.blueiris_clip.get_clip_images"
+    )
+    clip_images_mock.return_value = test_clips
+
+    test_gen_clip_loop = blueiris_clip.gen_clip("path", 200)
+    assert list(test_gen_clip_loop) == expected_output_loop
+
+
+def test_get_clip_images():
+    test_clip_images = blueiris_clip.get_clip_images()
+    assert test_clip_images == []

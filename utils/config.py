@@ -1,5 +1,9 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
 import pathlib
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Optional
+
+from blueiris_alerts.utils.exceptions import BlueIrisAlertsException
 
 
 class ServerSettings(BaseSettings):
@@ -16,6 +20,8 @@ class ServerSettings(BaseSettings):
     blueiris_api_password: str
 
     slack_api_token: str
+
+    log_level: Optional[str] = "INFO"
 
 
 class ClientSettings(BaseSettings):
@@ -35,9 +41,15 @@ class ClientSettings(BaseSettings):
     blueiris_api_user: str
     blueiris_api_password: str
 
+    log_level: Optional[str] = "INFO"
+
 
 def get_settings(setting: str):
     if setting == "server":
-        return ServerSettings()
+        settings = ServerSettings()
     elif setting == "client":
-        return ClientSettings()
+        settings = ClientSettings()
+    else:
+        raise BlueIrisAlertsException("get_settings only accepts `server` or `client`")
+
+    return settings
