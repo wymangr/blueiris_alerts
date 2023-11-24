@@ -5,13 +5,14 @@ from pydantic import ValidationError
 from datetime import datetime
 
 from blueiris_alerts.utils.config import get_settings
-from blueiris_alerts.utils.logger import get_logger
+from blueiris_alerts.utils.logger import Logger
 from blueiris_alerts.utils.key import encode
 from blueiris_alerts.utils.utils import get_blueiris_auth_url
 from blueiris_alerts.schemas import slack_schema
 
 SETTINGS = get_settings("client")
-LOGGER = get_logger(SETTINGS.log_level)
+logger = Logger(SETTINGS.log_level)
+BI_LOGGER = logger.get_logger()
 
 
 def watchdog_alert(camera: str, status: str, slack_client: slack.WebClient):
@@ -146,6 +147,8 @@ def send_alert(
         ]
     )
 
+    BI_LOGGER.debug(f"Message Blocks: {blocks.model_dump(exclude_none=True)}")
+
     slack_client.chat_postMessage(
         text=message_text,
         channel=SETTINGS.slack_channel,
@@ -166,7 +169,10 @@ if __name__ == "__main__":
         help="Name of Alert jpg. Can be passed in via BI Variable: `&ALERT_PATH`",
     )
     parser.add_argument(
-        "-m", "--memo", help="AI memo. Can be passed in via BI Variable: `&MEMO`"
+        "-m",
+        "--memo",
+        help="AI memo. Can be passed in via BI Variable: `&MEMO`",
+        default="",
     )
     parser.add_argument(
         "-o",
@@ -191,9 +197,10 @@ if __name__ == "__main__":
     offline = config["offline"]
     online = config["online"]
 
-    LOGGER.debug("Running with the following parameters: {config}")
-
-    client = slack.WebClient(token=SETTINGS.slack_api_token)
+    BI_LOGGER.info(f"Running with the following parameters: {config}")
+    client = slack.WebClient(
+        token=SETTINGS.slack_api_token, logger=logger.get_slack_logger()
+    )
 
     if offline or online:
         assert not all((online, offline)), "Can only specify --online OR --offline"

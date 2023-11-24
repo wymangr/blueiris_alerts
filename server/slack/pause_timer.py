@@ -5,7 +5,7 @@ import os
 from datetime import datetime, timedelta
 import slack_sdk as slack
 
-from blueiris_alerts.server.settings import SETTINGS, LOGGER
+from blueiris_alerts.server.settings import SETTINGS, BI_LOGGER, SLACK_LOGGER
 from blueiris_alerts.schemas.slack_schema import MessageSchema
 from blueiris_alerts.server.slack.messages import update_blocks_pause
 
@@ -16,15 +16,15 @@ if __name__ == "__main__":
     camera_full = sys.argv[3]
     channel = sys.argv[4]
     pause_sec = int(sys.argv[5])
-    LOGGER.debug(
+    BI_LOGGER.debug(
         f"pause_timer - message_ts: {message_ts}, camera {camera}, camera_full: {camera_full}, channel: {channel}, pause_sec: {pause_sec}"
     )
 
     timer_pid = os.getpid()
-    LOGGER.info(f"Starting pause timer with pid: {timer_pid}")
+    BI_LOGGER.info(f"Starting pause timer with pid: {timer_pid}")
 
     clear_time = datetime.now() + timedelta(seconds=pause_sec)
-    client = slack.WebClient(token=SETTINGS.slack_api_token)
+    client = slack.WebClient(token=SETTINGS.slack_api_token, logger=SLACK_LOGGER)
     message = client.conversations_history(
         channel=channel, latest=message_ts, count=1, inclusive="true"
     ).data["messages"][0]

@@ -1,7 +1,7 @@
 import requests
 import hashlib
 
-from blueiris_alerts.server.settings import SETTINGS, LOGGER
+from blueiris_alerts.server.settings import SETTINGS, BI_LOGGER
 from blueiris_alerts.utils.exceptions import BlueIrisError
 
 
@@ -10,7 +10,7 @@ def get_headers():
 
 
 def blueiris_json_login():
-    LOGGER.debug("Logging into Blueiris")
+    BI_LOGGER.debug("Logging into Blueiris")
     session = requests.Session()
     session.keep_alive = False
 
@@ -33,14 +33,14 @@ def blueiris_json_login():
 
     if login.status_code == 200 and login.json()["result"] == "success":
         return session, login.json()["session"]
-    LOGGER.error(
+    BI_LOGGER.error(
         f"BlueIris Login Failed: status_code: {login.status_code}, response: {login.json()}"
     )
     raise BlueIrisError("Failed to login to Blue Iris")
 
 
 def blueiris_json_logout(session: requests.Session(), session_id: str):
-    LOGGER.debug("Logging out of BlueIris")
+    BI_LOGGER.debug("Logging out of BlueIris")
     blueiris_url = f"{SETTINGS.blueiris_web_url}/json"
     headers = get_headers()
     data = f'{{"session":"{session_id}","cmd":"logout"}}'
@@ -50,10 +50,10 @@ def blueiris_json_logout(session: requests.Session(), session_id: str):
 def blueiris_command(
     session: requests.Session(), session_id: str, command: str, additional_options: str
 ):
-    LOGGER.debug(
+    BI_LOGGER.debug(
         f"blueiris_command - session_id: {session_id}, command: {command}, additional_options: {additional_options}"
     )
-    LOGGER.info(
+    BI_LOGGER.info(
         f"Executing Blueiris Command: {command} with additional options: {additional_options} "
     )
     blueiris_url = f"{SETTINGS.blueiris_web_url}/json"
@@ -65,7 +65,7 @@ def blueiris_command(
     if response.status_code == 200 and response.json()["result"] == "success":
         return response.json()
 
-    LOGGER.error(
+    BI_LOGGER.error(
         f"BlueIris Command Failed: status_code: {response.status_code}, response: {response.json()}"
     )
     raise BlueIrisError("Failed to execute command")

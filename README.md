@@ -37,5 +37,4 @@ Python script to execute from BlueIris to send the alert.
 <img src="images/slack_notification.png" alt="drawing" width="300"/>
 
 ## Todo:
-- Error Handling
 - Github Action

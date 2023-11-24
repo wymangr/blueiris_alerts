@@ -3,12 +3,12 @@ from urllib.request import urlopen
 import time
 
 from blueiris_alerts.server.blueiris import blueiris_api
-from blueiris_alerts.server.settings import LOGGER
+from blueiris_alerts.server.settings import BI_LOGGER
 from blueiris_alerts.utils.exceptions import BlueIrisError
 
 
 def get_clip(alert_clip):
-    LOGGER.debug(f"Getting recording for {alert_clip}")
+    BI_LOGGER.debug(f"Getting recording for {alert_clip}")
     session, session_id = blueiris_api.blueiris_json_login()
     clips = blueiris_api.blueiris_command(
         session, session_id, "alertlist", '"camera":"index"'

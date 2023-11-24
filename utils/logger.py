@@ -19,18 +19,28 @@ class StreamToLogger(object):
         pass
 
 
-def get_logger(log_level: str) -> logging.RootLogger:
-    logging.basicConfig(
-        level=log_level, format=LOG_FORMAT, filename="blueiris_alerts.log", filemode="a"
-    )
+class Logger:
+    def __init__(self, log_level: str):
+        logging.basicConfig(
+            level=log_level,
+            format=LOG_FORMAT,
+            filename="blueiris_alerts.log",
+            filemode="a",
+        )
 
-    console = logging.StreamHandler()
-    formatter = logging.Formatter(LOG_FORMAT)
-    console.setFormatter(formatter)
-    logging.getLogger("").addHandler(console)
+        formatter = logging.Formatter(LOG_FORMAT)
+        console = logging.StreamHandler()
+        console.setFormatter(formatter)
 
-    logger = logging.getLogger()
-    sys.stdout = StreamToLogger(logger, logging.INFO)
-    sys.stderr = StreamToLogger(logger, logging.ERROR)
+        self.root_logger = logging.getLogger()
+        self.root_logger.addHandler(console)
+        sys.stdout = StreamToLogger(self.root_logger, logging.INFO)
+        sys.stderr = StreamToLogger(self.root_logger, logging.ERROR)
 
-    return logger
+    def get_logger(self):
+        return self.root_logger
+
+    def get_slack_logger(self):
+        slack_logger = logging.getLogger("slack")
+        slack_logger.setLevel(logging.INFO)
+        return slack_logger

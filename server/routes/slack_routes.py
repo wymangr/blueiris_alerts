@@ -7,7 +7,7 @@ from typing import Annotated
 from pydantic import Json
 
 from blueiris_alerts.schemas.slack_schema import SlackInteractivity
-from blueiris_alerts.server.settings import SETTINGS, LOGGER
+from blueiris_alerts.server.settings import SETTINGS, BI_LOGGER
 from blueiris_alerts.utils.key import decode
 from blueiris_alerts.server.slack.messages import response_url_post
 from blueiris_alerts.server.blueiris.blueiris_camconfig import pause
@@ -20,8 +20,8 @@ async def interactivity(
     payload: Annotated[Json[SlackInteractivity], Form()],
     user_agent: Annotated[str | None, Header()] = None,
 ):
-    LOGGER.debug(f"/interactivity - payload: {payload}")
-    LOGGER.debug(f"/interactivity - user_agent: {user_agent}")
+    BI_LOGGER.debug(f"/interactivity - payload: {payload}")
+    BI_LOGGER.debug(f"/interactivity - user_agent: {user_agent}")
     if (
         payload.actions[0].type == "button"
         and payload.actions[0].text.text == "View Live Feed"
@@ -35,7 +35,7 @@ async def interactivity(
         button_selection = payload.actions[0].selected_option.value.split(",")
     else:
         button_selection = payload.actions[0].value.split(",")
-    LOGGER.debug(f"/interactivity - button_selection: {button_selection}")
+    BI_LOGGER.debug(f"/interactivity - button_selection: {button_selection}")
 
     action = button_selection[1]
     camera = payload.actions[0].action_id
@@ -45,7 +45,7 @@ async def interactivity(
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     if action == "pause":
-        LOGGER.info(f"/interactivity - Pausing Camera {camera}")
+        BI_LOGGER.info(f"/interactivity - Pausing Camera {camera}")
         pause("pause", camera, payload.actions[0].selected_option.text.text)
         response_url_post(
             action,
@@ -70,7 +70,7 @@ async def interactivity(
         )
 
     elif action == "start":
-        LOGGER.info(f"/interactivity - Starting Camera {camera}")
+        BI_LOGGER.info(f"/interactivity - Starting Camera {camera}")
         pause("start", camera)
         response_url_post(
             action,
@@ -85,7 +85,7 @@ async def interactivity(
         p.terminate()
 
     elif action == "add":
-        LOGGER.info(f"/interactivity - Adding Pause to Camera {camera}")
+        BI_LOGGER.info(f"/interactivity - Adding Pause to Camera {camera}")
         pause("pause", camera, payload.actions[0].selected_option.text.text)
         response_url_post(
             action,
