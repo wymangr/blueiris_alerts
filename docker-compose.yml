@@ -1,13 +1,13 @@
 version: '3.6'
 services:
 
-  blueisis_alerts:
+  blueiris_alerts:
     build:
       context: ./
       dockerfile: Dockerfile
-    container_name: blueisis_alerts
+    container_name: blueiris_alerts
     volumes:
-      - ./server/.env/:/opt/blueisis_alerts/server/.env
+      - ./server/.env/:/opt/blueiris_alerts/server/.env
     ports:
       - 8560:8560
     restart: unless-stopped
