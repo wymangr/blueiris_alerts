@@ -11,4 +11,7 @@ services:
     ports:
       - 8560:8560
     restart: unless-stopped
+    logging:
+      options:
+        tag: "{{.ImageName}}|{{.Name}}|{{.ImageFullID}}|{{.FullID}}"
 
