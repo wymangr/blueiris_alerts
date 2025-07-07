@@ -95,15 +95,24 @@ def send_alert(
 
     now = datetime.now().strftime("%m/%d/%Y %I:%M:%S %p")
     recording_url = f"{SETTINGS.server_url}/blueiris_alerts/clips?alert={path}&key={encode(SETTINGS.encryption_password, path)}"
-    view_recording_link = f"<{recording_url}|```View Recording```>{now}"
+    # view_recording_link = f"<{recording_url}|```View Recording```>{now}"
     live_feed_url = f"{SETTINGS.server_url}/blueiris_alerts/live_feed?alert={path}&camera={camera}&key={encode(SETTINGS.encryption_password, path)}"
 
     blocks = slack_schema.MessageSchema(
         blocks=[
             slack_schema.DividerBlock(),
-            slack_schema.ContextBlock(
-                elements=[slack_schema.MarkdownElment(text=view_recording_link)]
+            slack_schema.ActionBlock(
+                elements=[
+                    slack_schema.Elements(
+                        type="button",
+                        text=slack_schema.Text(text=f"View Recording", emoji=True),
+                        url=recording_url,
+                    )
+                ]
             ),
+            # slack_schema.ContextBlock(
+            #     elements=[slack_schema.MarkdownElment(text=view_recording_link)]
+            # ),
             slack_schema.ImageBlock(image_url=image_url, alt_text="alert"),
             slack_schema.SelectionBlock(
                 type="section",
