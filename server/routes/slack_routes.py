@@ -182,12 +182,9 @@ async def interactivity(
     _: Annotated[None, Depends(_verify_slack_signature)],
 ):
     BI_LOGGER.debug(f"/interactivity - payload: {payload}")
-    if (
-        payload.actions[0].type == "button"
-        and payload.actions[0].text is not None
-        and payload.actions[0].text.text == "View Live Feed"
-    ):
-        return Response(status_code=200)
+    if payload.actions[0].type == "button" and payload.actions[0].text is not None:
+        if payload.actions[0].text.text in ("View Live Feed", "View Recording"):
+            return Response(status_code=200)
 
     if payload.actions[0].type == "static_select":
         assert payload.actions[0].selected_option is not None

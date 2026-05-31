@@ -102,6 +102,14 @@ def test_slack_interactivity_livefeed(client: TestClient, headers: dict):
     assert response.status_code == 200
 
 
+def test_slack_interactivity_view_recording(client: TestClient, headers: dict):
+    """Clicking 'View Recording' (url button, no value) should return 200 without crashing."""
+    view_recording_actions = [{"type": "button", "text": {"text": "View Recording"}, "url": test_data.RECORDING_URL}]
+    data = {"payload": get_payload(view_recording_actions).model_dump_json()}
+    response = client.post("blueiris_alerts/interactivity", data=data, headers=headers)
+    assert response.status_code == 200
+
+
 def test_slack_interactivity_pause(
     client: TestClient, headers: dict, mocker: MockFixture
 ):
