@@ -21,25 +21,30 @@ router = APIRouter(prefix="/blueiris_alerts", tags=["slack"])
 _pause_tasks: Dict[str, asyncio.Task] = {}
 
 
-def _extract_path_key(blocks) -> Tuple[Optional[str], Optional[str]]:
-    """Extract the alert path and HMAC key from the recording URL in blocks[1].
+def _extract_path_key(blocks) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """Extract the alert path, expiry timestamp, and HMAC key from the
+    recording URL in blocks[1].
 
     The recording URL has the form:
-        {server_url}/blueiris_alerts/clips?alert={path}&key={hmac}
+        {server_url}/blueiris_alerts/clips?alert={path}&expires={ts}&key={hmac}
     It is set once when the alert is posted and never modified, so it is
     the stable source of truth for authentication across all interactions.
     """
     try:
         recording_block = blocks[1]
         if not isinstance(recording_block, ActionBlock):
-            return None, None
+            return None, None, None
         url = recording_block.elements[0].url
         if not url:
-            return None, None
+            return None, None, None
         params = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
-        return params.get("alert", [None])[0], params.get("key", [None])[0]
+        return (
+            params.get("alert", [None])[0],
+            params.get("expires", [None])[0],
+            params.get("key", [None])[0],
+        )
     except (IndexError, AttributeError):
-        return None, None
+        return None, None, None
 
 
 def _verify_slack_signature(
@@ -200,8 +205,13 @@ async def interactivity(
 
     # Auth: verify the HMAC in the recording URL rather than the button value.
     # The recording URL (blocks[1]) is signed at alert-send time and never changes.
-    path, key = _extract_path_key(payload.message.blocks)
-    if not path or not key or encode(SETTINGS.encryption_password, path) != key:
+    path, expires, key = _extract_path_key(payload.message.blocks)
+    if (
+        not path
+        or not expires
+        or not key
+        or encode(SETTINGS.encryption_password, f"{path}:{expires}") != key
+    ):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     background_tasks.add_task(

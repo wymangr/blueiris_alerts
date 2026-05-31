@@ -1,3 +1,5 @@
+import time as _time
+
 from blueiris_alerts.schemas import slack_schema
 from blueiris_alerts.utils.config import get_settings
 from blueiris_alerts.utils.key import encode
@@ -5,7 +7,8 @@ from blueiris_alerts.utils.key import encode
 SETTINGS = get_settings("client")
 ALERTING_CAMERA = "CAMERA"
 PATH = "AB.20230101_000000.123456.1-1.jpg"
-RECORDING_URL = f"https://server/blueiris_alerts/clips?alert={PATH}&key={encode(SETTINGS.encryption_password, PATH)}"
+EXPIRES = str(int(_time.time()) + 7 * 24 * 3600)  # 7-day expiry
+RECORDING_URL = f"https://server/blueiris_alerts/clips?alert={PATH}&expires={EXPIRES}&key={encode(SETTINGS.encryption_password, f'{PATH}:{EXPIRES}')}"
 
 TEST_BLOCKS = [
     slack_schema.DividerBlock(),

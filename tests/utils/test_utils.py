@@ -28,4 +28,4 @@ def test_get_blueiris_auth_url():
 def test_get_settings_invalid():
     """Invalid setting name raises BlueIrisAlertsException."""
     with pytest.raises(BlueIrisAlertsException):
-        get_settings("invalid")
+        get_settings("invalid")  # type: ignore[call-overload]

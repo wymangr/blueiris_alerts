@@ -2,6 +2,7 @@ import argparse
 import json
 import pathlib
 import threading
+import time
 from typing import Any, cast
 import slack_sdk as slack
 
@@ -128,9 +129,11 @@ def send_alert(
     )
 
     # now = datetime.now().strftime("%m/%d/%Y %I:%M:%S %p")
-    recording_url = f"{SETTINGS.server_url}/blueiris_alerts/clips?alert={path}&key={encode(SETTINGS.encryption_password, path)}"
+    expires = str(int(time.time()) + 7 * 24 * 3600)  # URLs valid for 7 days
+    _key = encode(SETTINGS.encryption_password, f"{path}:{expires}")
+    recording_url = f"{SETTINGS.server_url}/blueiris_alerts/clips?alert={path}&expires={expires}&key={_key}"
     # view_recording_link = f"<{recording_url}|```View Recording```>{now}"
-    live_feed_url = f"{SETTINGS.server_url}/blueiris_alerts/live_feed?alert={path}&camera={camera}&key={encode(SETTINGS.encryption_password, path)}"
+    live_feed_url = f"{SETTINGS.server_url}/blueiris_alerts/live_feed?alert={path}&camera={camera}&expires={expires}&key={_key}"
 
     blocks = slack_schema.MessageSchema(
         blocks=[

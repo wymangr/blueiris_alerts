@@ -202,7 +202,7 @@ def test_slack_interactivity_unauthorized(client: TestClient, headers: dict):
                     slack_schema.Elements(
                         type="button",
                         text=slack_schema.Text(text="View Recording"),
-                        url="https://server/blueiris_alerts/clips?alert=some_path&key=WRONGKEY",
+                        url=f"https://server/blueiris_alerts/clips?alert=some_path&expires={test_data.EXPIRES}&key=WRONGKEY",
                     )
                 ]
             ),
