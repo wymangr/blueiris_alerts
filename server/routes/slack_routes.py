@@ -2,9 +2,10 @@ import asyncio
 import hashlib
 import hmac
 import time as _time
-from typing import Annotated, Dict
+import urllib.parse
+from typing import Annotated, Dict, Optional
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request, Response
 from pydantic import Json
 
 from blueiris_alerts.schemas.slack_schema import SlackInteractivity
@@ -20,11 +21,17 @@ router = APIRouter(prefix="/blueiris_alerts", tags=["slack"])
 _pause_tasks: Dict[str, asyncio.Task] = {}
 
 
-async def _verify_slack_signature(request: Request):
+def _verify_slack_signature(
+    request: Request,
+    payload: Annotated[Optional[str], Form()] = None,
+):
     """Verify the X-Slack-Signature HMAC-SHA256 header.
 
-    Skipped (with a warning) when SLACK_SIGNING_SECRET is not configured so
-    that existing deployments keep working during the migration period.
+    Reconstructs the raw body from the already-parsed Form field instead of
+    calling request.body() (which would fail because the Form parser has
+    already consumed the stream).
+
+    Skipped (with a warning) when SLACK_SIGNING_SECRET is not configured.
     """
     if not SETTINGS.slack_signing_secret:
         BI_LOGGER.warning(
@@ -41,8 +48,9 @@ async def _verify_slack_signature(request: Request):
     except ValueError:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    body = await request.body()
-    sig_basestring = f"v0:{timestamp}:{body.decode()}"
+    # Re-build the raw form body that Slack originally signed.
+    raw_body = urllib.parse.urlencode({"payload": payload or ""})
+    sig_basestring = f"v0:{timestamp}:{raw_body}"
     computed = "v0=" + hmac.new(
         SETTINGS.slack_signing_secret.encode(),
         sig_basestring.encode(),
@@ -53,9 +61,108 @@ async def _verify_slack_signature(request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+async def _process_action(
+    payload: SlackInteractivity,
+    action: str,
+    camera: str,
+    camera_full: str,
+    button_selection: list,
+):
+    """Performs the slow work (BlueIris API + Slack response_url) after 200 is
+    already on its way back to Slack.  Runs as a FastAPI BackgroundTask."""
+    try:
+        if action == "pause":
+            BI_LOGGER.info(f"/interactivity - Pausing Camera {camera}")
+            assert payload.actions[0].selected_option is not None
+            await asyncio.to_thread(
+                pause, "pause", camera, payload.actions[0].selected_option.text.text
+            )
+            await asyncio.to_thread(
+                response_url_post,
+                action,
+                payload.message.blocks,
+                camera,
+                camera_full,
+                button_selection[3],
+                button_selection[4],
+                payload.response_url,
+            )
+            assert payload.message.ts is not None
+            task = asyncio.create_task(
+                pause_timer_task(
+                    payload.message.ts,
+                    camera,
+                    camera_full,
+                    payload.channel.id,
+                    int(button_selection[2]),
+                    button_selection[3],
+                    button_selection[4],
+                    _pause_tasks,
+                )
+            )
+            _pause_tasks[camera] = task
+
+        elif action == "start":
+            BI_LOGGER.info(f"/interactivity - Starting Camera {camera}")
+            await asyncio.to_thread(pause, "start", camera)
+            await asyncio.to_thread(
+                response_url_post,
+                action,
+                payload.message.blocks,
+                camera,
+                camera_full,
+                button_selection[3],
+                button_selection[4],
+                payload.response_url,
+            )
+            existing = _pause_tasks.pop(camera, None)
+            if existing:
+                existing.cancel()
+
+        elif action == "add":
+            BI_LOGGER.info(f"/interactivity - Adding Pause to Camera {camera}")
+            assert payload.actions[0].selected_option is not None
+            await asyncio.to_thread(
+                pause, "pause", camera, payload.actions[0].selected_option.text.text
+            )
+            await asyncio.to_thread(
+                response_url_post,
+                action,
+                payload.message.blocks,
+                camera,
+                camera_full,
+                button_selection[3],
+                button_selection[4],
+                payload.response_url,
+            )
+            existing = _pause_tasks.pop(camera, None)
+            if existing:
+                existing.cancel()
+            assert payload.message.ts is not None
+            task = asyncio.create_task(
+                pause_timer_task(
+                    payload.message.ts,
+                    camera,
+                    camera_full,
+                    payload.channel.id,
+                    int(button_selection[2]),
+                    button_selection[3],
+                    button_selection[4],
+                    _pause_tasks,
+                )
+            )
+            _pause_tasks[camera] = task
+    except Exception as e:
+        BI_LOGGER.error(
+            f"_process_action failed for camera={camera}, action={action}: {e}",
+            exc_info=True,
+        )
+
+
 @router.post("/interactivity")
 async def interactivity(
     payload: Annotated[Json[SlackInteractivity], Form()],
+    background_tasks: BackgroundTasks,
     _: Annotated[None, Depends(_verify_slack_signature)],
 ):
     BI_LOGGER.debug(f"/interactivity - payload: {payload}")
@@ -64,7 +171,7 @@ async def interactivity(
         and payload.actions[0].text is not None
         and payload.actions[0].text.text == "View Live Feed"
     ):
-        return
+        return Response(status_code=200)
 
     if payload.actions[0].type == "static_select":
         assert payload.actions[0].selected_option is not None
@@ -83,86 +190,11 @@ async def interactivity(
     if encode(SETTINGS.encryption_password, button_selection[3]) != button_selection[4]:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    if action == "pause":
-        BI_LOGGER.info(f"/interactivity - Pausing Camera {camera}")
-        assert payload.actions[0].selected_option is not None
-        await asyncio.to_thread(
-            pause, "pause", camera, payload.actions[0].selected_option.text.text
-        )
-        await asyncio.to_thread(
-            response_url_post,
-            action,
-            payload.message.blocks,
-            camera,
-            camera_full,
-            button_selection[3],
-            button_selection[4],
-            payload.response_url,
-        )
-        assert payload.message.ts is not None
-        task = asyncio.create_task(
-            pause_timer_task(
-                payload.message.ts,
-                camera,
-                camera_full,
-                payload.channel.id,
-                int(button_selection[2]),
-                button_selection[3],
-                button_selection[4],
-                _pause_tasks,
-            )
-        )
-        _pause_tasks[camera] = task
-
-    elif action == "start":
-        BI_LOGGER.info(f"/interactivity - Starting Camera {camera}")
-        await asyncio.to_thread(pause, "start", camera)
-        await asyncio.to_thread(
-            response_url_post,
-            action,
-            payload.message.blocks,
-            camera,
-            camera_full,
-            button_selection[3],
-            button_selection[4],
-            payload.response_url,
-        )
-        existing = _pause_tasks.pop(camera, None)
-        if existing:
-            existing.cancel()
-
-    elif action == "add":
-        BI_LOGGER.info(f"/interactivity - Adding Pause to Camera {camera}")
-        assert payload.actions[0].selected_option is not None
-        await asyncio.to_thread(
-            pause, "pause", camera, payload.actions[0].selected_option.text.text
-        )
-        await asyncio.to_thread(
-            response_url_post,
-            action,
-            payload.message.blocks,
-            camera,
-            camera_full,
-            button_selection[3],
-            button_selection[4],
-            payload.response_url,
-        )
-        existing = _pause_tasks.pop(camera, None)
-        if existing:
-            existing.cancel()
-        assert payload.message.ts is not None
-        task = asyncio.create_task(
-            pause_timer_task(
-                payload.message.ts,
-                camera,
-                camera_full,
-                payload.channel.id,
-                int(button_selection[2]),
-                button_selection[3],
-                button_selection[4],
-                _pause_tasks,
-            )
-        )
-        _pause_tasks[camera] = task
+    # Return 200 to Slack immediately — Slack cancels interactions that take > 3 s.
+    # All slow work (BlueIris API, Slack response_url post) runs in the background.
+    background_tasks.add_task(
+        _process_action, payload, action, camera, camera_full, button_selection
+    )
+    return Response(status_code=200)
 
     return {"status": "success"}

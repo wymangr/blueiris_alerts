@@ -8,7 +8,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pytest_mock import MockFixture
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 from blueiris_alerts.server.app import app
 from blueiris_alerts.server.routes import slack_routes as routes_module
@@ -129,16 +129,16 @@ def test_slack_signature_valid(mocker: MockFixture):
     """Correctly signed request → _verify_slack_signature returns without raising."""
     secret = "test_signing_secret"
     timestamp = str(int(time.time()))
-    body = "payload=test_body"
+    payload_str = "test_body"
+    body = urllib.parse.urlencode({"payload": payload_str})
     sig = compute_slack_sig(secret, timestamp, body)
 
     mock_req = MagicMock()
     mock_req.headers = {"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": sig}
-    mock_req.body = AsyncMock(return_value=body.encode())
 
     mocker.patch.object(routes_module.SETTINGS, "slack_signing_secret", secret)
     # Should not raise
-    asyncio.run(routes_module._verify_slack_signature(mock_req))
+    routes_module._verify_slack_signature(mock_req, payload_str)
 
 
 def test_slack_signature_expired_timestamp(client: TestClient, headers: dict, mocker: MockFixture):
@@ -167,11 +167,10 @@ def test_slack_signature_mismatch(mocker: MockFixture):
 
     mock_req = MagicMock()
     mock_req.headers = {"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": "v0=wrongsignature"}
-    mock_req.body = AsyncMock(return_value=b"payload=test_body")
 
     mocker.patch.object(routes_module.SETTINGS, "slack_signing_secret", secret)
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(routes_module._verify_slack_signature(mock_req))
+        routes_module._verify_slack_signature(mock_req, "test_body")
     assert exc_info.value.status_code == 401
 
 

@@ -6,7 +6,7 @@ from typing import Any, cast
 import slack_sdk as slack
 
 from pydantic import ValidationError
-from datetime import datetime
+# from datetime import datetime
 
 from blueiris_alerts.utils.config import get_settings
 from blueiris_alerts.utils.logger import Logger
@@ -127,7 +127,7 @@ def send_alert(
         f"/file/clips/{path}",
     )
 
-    now = datetime.now().strftime("%m/%d/%Y %I:%M:%S %p")
+    # now = datetime.now().strftime("%m/%d/%Y %I:%M:%S %p")
     recording_url = f"{SETTINGS.server_url}/blueiris_alerts/clips?alert={path}&key={encode(SETTINGS.encryption_password, path)}"
     # view_recording_link = f"<{recording_url}|```View Recording```>{now}"
     live_feed_url = f"{SETTINGS.server_url}/blueiris_alerts/live_feed?alert={path}&camera={camera}&key={encode(SETTINGS.encryption_password, path)}"
