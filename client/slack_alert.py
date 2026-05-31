@@ -1,4 +1,8 @@
 import argparse
+import json
+import pathlib
+import threading
+from typing import Any, cast
 import slack_sdk as slack
 
 from pydantic import ValidationError
@@ -13,6 +17,24 @@ from blueiris_alerts.schemas import slack_schema
 SETTINGS = get_settings("client")
 logger = Logger(SETTINGS.log_level)
 BI_LOGGER = logger.get_logger()
+
+_CACHE_FILE = pathlib.Path.home() / ".blueiris_alerts_cache.json"
+
+
+def _load_cache() -> dict:
+    if _CACHE_FILE.exists():
+        try:
+            return json.loads(_CACHE_FILE.read_text())
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_cache(data: dict):
+    try:
+        _CACHE_FILE.write_text(json.dumps(data))
+    except Exception:
+        pass
 
 
 def watchdog_alert(camera: str, status: str, slack_client: slack.WebClient):
@@ -35,7 +57,7 @@ def remove_message_blocks(
             )
 
 
-def get_channel_id(channels: dict):
+def get_channel_id(channels: Any) -> str | None:
     channel_id = None
     for c in channels["channels"]:
         if c["name"] == SETTINGS.slack_channel:
@@ -43,14 +65,24 @@ def get_channel_id(channels: dict):
     return channel_id
 
 
+def get_cached_channel_id(slack_client: slack.WebClient):
+    cache = _load_cache()
+    if "channel_id" in cache:
+        return cache["channel_id"]
+    channels = slack_client.conversations_list()
+    channel_id = get_channel_id(channels)
+    if channel_id:
+        _save_cache({"channel_id": channel_id})
+    return channel_id
+
+
 def update_old(camera: str, slack_client: slack.WebClient):
     try:
-        channels = slack_client.conversations_list()
-        channel_id = get_channel_id(channels)
+        channel_id = get_cached_channel_id(slack_client)
         if not channel_id:
             print("unable to get channel id")
             return False
-        messages = slack_client.conversations_history(channel=channel_id, count=10).data
+        messages = cast(dict, slack_client.conversations_history(channel=channel_id, count=10).data)
         if not messages["ok"]:
             print("unable to update old messages")
             return False
@@ -59,14 +91,16 @@ def update_old(camera: str, slack_client: slack.WebClient):
             if "blocks" in message.keys() and len(message["blocks"]) == 7:
                 try:
                     message_block = slack_schema.MessageSchema(blocks=message["blocks"])
+                    block = message_block.blocks[4]
                     if (
-                        message_block.blocks[4].elements[0].action_id == camera
-                        and message_block.blocks[4].elements[0].placeholder.text
-                        == "Pause"
+                        isinstance(block, slack_schema.ActionBlock)
+                        and block.elements[0].action_id == camera
+                        and block.elements[0].placeholder is not None
+                        and block.elements[0].placeholder.text == "Pause"
                     ):
                         removed_message_blocks[
                             message["ts"]
-                        ] = message_block.model_dump()
+                        ] = message_block.model_dump(exclude_none=True)
                 except ValidationError:
                     print("Failed Validation")
                     continue
@@ -220,5 +254,9 @@ if __name__ == "__main__":
     else:
         assert alert_path is not None, "--path is required"
 
-        update_old(alerting_camera, client)
+        t = threading.Thread(
+            target=update_old, args=(alerting_camera, client), daemon=True
+        )
+        t.start()
         send_alert(alerting_camera, alerting_camera_full, alert_path, client, memo)
+        t.join()

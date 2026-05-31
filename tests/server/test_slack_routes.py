@@ -12,7 +12,7 @@ from blueiris_alerts.tests import test_data
 SETTINGS = get_settings("server")
 
 CHANNEL = slack_schema.ChannelInteractivity(id="id")
-MESSAGE = slack_schema.MessageSchema(blocks=[slack_schema.DividerBlock()])
+MESSAGE = slack_schema.MessageSchema(blocks=[slack_schema.DividerBlock()], ts="12345.67890")
 LIVEFEED_ACTIONS = [{"type": "button", "text": {"text": "View Live Feed"}}]
 
 
@@ -23,7 +23,7 @@ def get_button_actions(button_action: str) -> list:
             "text": {"text": "text"},
             "selected_option": {
                 "text": {"text": "text"},
-                "value": f"camera,{button_action},1800,{test_data.PATH},{encode(SETTINGS.encryption_password, test_data.PATH)},9999",
+                "value": f"camera,{button_action},1800,{test_data.PATH},{encode(SETTINGS.encryption_password, test_data.PATH)}",
             },
             "action_id": "camera",
         }
@@ -72,11 +72,16 @@ def test_slack_interactivity_pause(
         response_url_post_mock = mocker.patch(
             "blueiris_alerts.server.routes.slack_routes.response_url_post"
         )
-        popen_mock = mocker.patch("blueiris_alerts.server.routes.slack_routes.sp.Popen")
-        process_mock = mocker.patch(
-            "blueiris_alerts.server.routes.slack_routes.psutil.Process"
+        timer_mock = mocker.patch(
+            "blueiris_alerts.server.routes.slack_routes.pause_timer_task",
         )
-        process_mock.return_value.terminate
+        def _close_coro(coro):
+            coro.close()
+
+        create_task_mock = mocker.patch(
+            "blueiris_alerts.server.routes.slack_routes.asyncio.create_task",
+            side_effect=_close_coro,
+        )
 
         action = get_button_actions(button_option)
         data = {"payload": get_payload(action).model_dump_json()}
@@ -85,8 +90,7 @@ def test_slack_interactivity_pause(
         )
         pause_mock.assert_called_once()
         response_url_post_mock.assert_called_once()
-        if button_option == "pause" or button_option == "add":
-            popen_mock.assert_called_once()
-        if button_option == "start" or button_option == "add":
-            process_mock.assert_called_once()
+        if button_option in ("pause", "add"):
+            timer_mock.assert_called_once()
+            create_task_mock.assert_called_once()
         assert response.status_code == 200

@@ -1,5 +1,6 @@
 import sys
 import logging
+from typing import Optional
 
 LOG_FORMAT = "%(asctime)s %(levelname)-8s %(message)s"
 
@@ -20,9 +21,9 @@ class StreamToLogger(object):
 
 
 class Logger:
-    def __init__(self, log_level: str):
+    def __init__(self, log_level: Optional[str] = "INFO"):
         logging.basicConfig(
-            level=log_level,
+            level=log_level or "INFO",
             format=LOG_FORMAT,
             filename="blueiris_alerts.log",
             filemode="a",
