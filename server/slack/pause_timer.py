@@ -15,8 +15,6 @@ async def pause_timer_task(
     camera_full: str,
     channel: str,
     pause_sec: int,
-    path: str,
-    key: str,
     active_tasks: Dict[str, asyncio.Task],
 ):
     """Runs as an asyncio background task.
@@ -46,16 +44,10 @@ async def pause_timer_task(
             assert block_4.elements[0].text is not None
             assert block_5.elements[0].options is not None
             block_4.elements[0].text.text = f"Start ({minutes} min)"
-            block_4.elements[0].value = f"{camera_full},start,0,{path},{key}"
-            block_5.elements[0].options[0].value = (
-                f"{camera_full},add,{1800 + seconds},{path},{key}"
-            )
-            block_5.elements[0].options[1].value = (
-                f"{camera_full},add,{3600 + seconds},{path},{key}"
-            )
-            block_5.elements[0].options[2].value = (
-                f"{camera_full},add,{21600 + seconds},{path},{key}"
-            )
+            block_4.elements[0].value = f"{camera_full},start,0"
+            block_5.elements[0].options[0].value = f"{camera_full},add,{1800 + seconds}"
+            block_5.elements[0].options[1].value = f"{camera_full},add,{3600 + seconds}"
+            block_5.elements[0].options[2].value = f"{camera_full},add,{21600 + seconds}"
 
             await asyncio.to_thread(
                 client.chat_update,
@@ -73,7 +65,7 @@ async def pause_timer_task(
     BI_LOGGER.info(f"pause_timer_task expired for camera={camera}")
     active_tasks.pop(camera, None)
 
-    new_blocks = update_blocks_pause("start", blocks.blocks, camera, camera_full, path, key)
+    new_blocks = update_blocks_pause("start", blocks.blocks, camera, camera_full)
     await asyncio.to_thread(
         client.chat_update,
         channel=channel,

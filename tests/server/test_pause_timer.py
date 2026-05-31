@@ -3,13 +3,11 @@ from unittest.mock import MagicMock, patch
 
 from blueiris_alerts.server.slack.messages import update_blocks_pause
 from blueiris_alerts.server.slack.pause_timer import pause_timer_task
-from blueiris_alerts.tests.test_data import TEST_BLOCKS, ALERTING_CAMERA, PATH
-from blueiris_alerts.utils.config import get_settings
+from blueiris_alerts.tests.test_data import TEST_BLOCKS, ALERTING_CAMERA
 
-_SETTINGS = get_settings("client")
 # Build the paused-state block list (dicts) that pause_timer_task receives.
 PAUSED_BLOCKS = update_blocks_pause(
-    "pause", TEST_BLOCKS, ALERTING_CAMERA, ALERTING_CAMERA, PATH, _SETTINGS.encryption_password
+    "pause", TEST_BLOCKS, ALERTING_CAMERA, ALERTING_CAMERA
 )
 
 
@@ -35,7 +33,7 @@ def test_pause_timer_task_expiry():
     ):
         asyncio.run(
             pause_timer_task(
-                "ts", ALERTING_CAMERA, ALERTING_CAMERA, "channel", 0, PATH, "key", active_tasks
+                "ts", ALERTING_CAMERA, ALERTING_CAMERA, "channel", 0, active_tasks
             )
         )
 
@@ -60,7 +58,7 @@ def test_pause_timer_task_cancelled():
     ):
         asyncio.run(
             pause_timer_task(
-                "ts", ALERTING_CAMERA, ALERTING_CAMERA, "channel", 3600, PATH, "key", active_tasks
+                "ts", ALERTING_CAMERA, ALERTING_CAMERA, "channel", 3600, active_tasks
             )
         )
 

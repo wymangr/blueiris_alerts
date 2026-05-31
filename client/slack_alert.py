@@ -163,15 +163,15 @@ def send_alert(
                         options=[
                             slack_schema.Options(
                                 text=slack_schema.Text(text="Pause 30m"),
-                                value=f"{alerting_camera},pause,1800,{path},{encode(SETTINGS.encryption_password, path)}",
+                                value=f"{alerting_camera},pause,1800",
                             ),
                             slack_schema.Options(
                                 text=slack_schema.Text(text="Pause 1h"),
-                                value=f"{alerting_camera},pause,3600,{path},{encode(SETTINGS.encryption_password, path)}",
+                                value=f"{alerting_camera},pause,3600",
                             ),
                             slack_schema.Options(
                                 text=slack_schema.Text(text="Pause 6h"),
-                                value=f"{alerting_camera},pause,21600,{path},{encode(SETTINGS.encryption_password, path)}",
+                                value=f"{alerting_camera},pause,21600",
                             ),
                         ],
                     )

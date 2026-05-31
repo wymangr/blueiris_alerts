@@ -2,11 +2,8 @@ import pytest
 
 from fastapi import HTTPException
 from blueiris_alerts.server.slack import messages
-from tests.test_data import TEST_BLOCKS, ALERTING_CAMERA, PATH
-from blueiris_alerts.utils.config import get_settings
+from tests.test_data import TEST_BLOCKS, ALERTING_CAMERA
 from blueiris_alerts.schemas import slack_schema
-
-SETTINGS = get_settings("client")
 
 
 @pytest.fixture
@@ -25,8 +22,6 @@ def test_response_url_post(setup_request_post):
             TEST_BLOCKS,
             ALERTING_CAMERA,
             ALERTING_CAMERA,
-            PATH,
-            SETTINGS.encryption_password,
             "https://response_url",
         )
         assert setup_request_post.called
@@ -38,8 +33,6 @@ def test_update_blocks_pause():
         TEST_BLOCKS,
         ALERTING_CAMERA,
         ALERTING_CAMERA,
-        PATH,
-        SETTINGS.encryption_password,
     )
     assert PAUSE[4]["elements"][0]["text"]["text"] == "Start"
     assert PAUSE[5]["elements"][0]["placeholder"]["text"] == "Increase Pause"
@@ -50,19 +43,15 @@ def test_update_blocks_pause():
         slack_schema.MessageSchema(blocks=PAUSE).blocks,
         ALERTING_CAMERA,
         ALERTING_CAMERA,
-        PATH,
-        SETTINGS.encryption_password,
     )
     assert ADD[5]["elements"][0]["options"][0]["text"]["text"] == "Add 30m"
-    assert "CAMERA,add,1800," in ADD[5]["elements"][0]["options"][0]["value"]
+    assert ADD[5]["elements"][0]["options"][0]["value"] == f"{ALERTING_CAMERA},add,1800"
 
     START = messages.update_blocks_pause(
         "start",
         slack_schema.MessageSchema(blocks=ADD).blocks,
         ALERTING_CAMERA,
         ALERTING_CAMERA,
-        PATH,
-        SETTINGS.encryption_password,
     )
     assert (
         START[3]["text"]["text"]
@@ -81,7 +70,5 @@ def test_response_url_post_failure(setup_request_post, mocker):
             TEST_BLOCKS,
             ALERTING_CAMERA,
             ALERTING_CAMERA,
-            PATH,
-            SETTINGS.encryption_password,
             "https://response_url",
         )

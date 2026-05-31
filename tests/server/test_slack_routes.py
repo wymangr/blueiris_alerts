@@ -20,7 +20,23 @@ from blueiris_alerts.tests import test_data
 SETTINGS = get_settings("server")
 
 CHANNEL = slack_schema.ChannelInteractivity(id="id")
-MESSAGE = slack_schema.MessageSchema(blocks=[slack_schema.DividerBlock()], ts="12345.67890")
+# MESSAGE includes a View Recording button at [1] so the server can extract
+# path/key for auth from the recording URL.
+MESSAGE = slack_schema.MessageSchema(
+    blocks=[
+        slack_schema.DividerBlock(),
+        slack_schema.ActionBlock(
+            elements=[
+                slack_schema.Elements(
+                    type="button",
+                    text=slack_schema.Text(text="View Recording"),
+                    url=test_data.RECORDING_URL,
+                )
+            ]
+        ),
+    ],
+    ts="12345.67890",
+)
 LIVEFEED_ACTIONS = [{"type": "button", "text": {"text": "View Live Feed"}}]
 
 
@@ -31,12 +47,11 @@ def get_button_actions(button_action: str) -> list:
             "text": {"text": "text"},
             "selected_option": {
                 "text": {"text": "text"},
-                "value": f"camera,{button_action},1800,{test_data.PATH},{encode(SETTINGS.encryption_password, test_data.PATH)}",
+                "value": f"camera,{button_action},1800",
             },
             "action_id": "camera",
         }
     ]
-
     return actions
 
 
@@ -46,7 +61,7 @@ def get_button_action_button(button_action: str) -> list:
         {
             "type": "button",
             "text": {"text": "other"},
-            "value": f"camera,{button_action},1800,{test_data.PATH},{encode(SETTINGS.encryption_password, test_data.PATH)}",
+            "value": f"camera,{button_action},1800",
             "action_id": "camera",
         }
     ]
@@ -100,6 +115,7 @@ def test_slack_interactivity_pause(
         timer_mock = mocker.patch(
             "blueiris_alerts.server.routes.slack_routes.pause_timer_task",
         )
+
         def _close_coro(coro):
             coro.close()
 
@@ -125,8 +141,9 @@ def test_slack_interactivity_pause(
 # Slack signature verification
 # ---------------------------------------------------------------------------
 
+
 def test_slack_signature_valid(mocker: MockFixture):
-    """Correctly signed request → _verify_slack_signature returns without raising."""
+    """Correctly signed request -> _verify_slack_signature returns without raising."""
     secret = "test_signing_secret"
     timestamp = str(int(time.time()))
     payload_str = "test_body"
@@ -137,12 +154,11 @@ def test_slack_signature_valid(mocker: MockFixture):
     mock_req.headers = {"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": sig}
 
     mocker.patch.object(routes_module.SETTINGS, "slack_signing_secret", secret)
-    # Should not raise
     routes_module._verify_slack_signature(mock_req, payload_str)
 
 
 def test_slack_signature_expired_timestamp(client: TestClient, headers: dict, mocker: MockFixture):
-    """Timestamp > 300s old → 401."""
+    """Timestamp > 300s old -> 401."""
     mocker.patch.object(routes_module.SETTINGS, "slack_signing_secret", "test_secret")
     old_ts = str(int(time.time()) - 400)
     data = {"payload": get_payload(LIVEFEED_ACTIONS).model_dump_json()}
@@ -152,7 +168,7 @@ def test_slack_signature_expired_timestamp(client: TestClient, headers: dict, mo
 
 
 def test_slack_signature_non_numeric_timestamp(client: TestClient, headers: dict, mocker: MockFixture):
-    """Non-numeric timestamp (ValueError) → 401."""
+    """Non-numeric timestamp (ValueError) -> 401."""
     mocker.patch.object(routes_module.SETTINGS, "slack_signing_secret", "test_secret")
     data = {"payload": get_payload(LIVEFEED_ACTIONS).model_dump_json()}
     sig_headers = {**headers, "X-Slack-Request-Timestamp": "not_a_number", "X-Slack-Signature": "v0=invalid"}
@@ -161,44 +177,54 @@ def test_slack_signature_non_numeric_timestamp(client: TestClient, headers: dict
 
 
 def test_slack_signature_mismatch(mocker: MockFixture):
-    """Valid timestamp but wrong signature → HTTPException(401)."""
+    """Valid timestamp but wrong signature -> HTTPException(401)."""
     secret = "test_secret"
     timestamp = str(int(time.time()))
-
+    body = urllib.parse.urlencode({"payload": "body"})
     mock_req = MagicMock()
-    mock_req.headers = {"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": "v0=wrongsignature"}
-
+    mock_req.headers = {
+        "X-Slack-Request-Timestamp": timestamp,
+        "X-Slack-Signature": "v0=invalidsig",
+    }
     mocker.patch.object(routes_module.SETTINGS, "slack_signing_secret", secret)
     with pytest.raises(HTTPException) as exc_info:
-        routes_module._verify_slack_signature(mock_req, "test_body")
+        routes_module._verify_slack_signature(mock_req, "body")
     assert exc_info.value.status_code == 401
 
 
-# ---------------------------------------------------------------------------
-# Encryption check
-# ---------------------------------------------------------------------------
-
 def test_slack_interactivity_unauthorized(client: TestClient, headers: dict):
-    """Wrong encryption key in button value → 401."""
-    actions = [
-        {
-            "type": "static_select",
-            "text": {"text": "text"},
-            "selected_option": {
-                "text": {"text": "text"},
-                "value": f"camera,pause,1800,{test_data.PATH},WRONGKEY",
-            },
-            "action_id": "camera",
-        }
-    ]
-    data = {"payload": get_payload(actions).model_dump_json()}
+    """Tampered recording URL (key does not match path) -> 401."""
+    bad_message = slack_schema.MessageSchema(
+        blocks=[
+            slack_schema.DividerBlock(),
+            slack_schema.ActionBlock(
+                elements=[
+                    slack_schema.Elements(
+                        type="button",
+                        text=slack_schema.Text(text="View Recording"),
+                        url="https://server/blueiris_alerts/clips?alert=some_path&key=WRONGKEY",
+                    )
+                ]
+            ),
+        ],
+        ts="12345.67890",
+    )
+    payload = slack_schema.SlackInteractivity(
+        type="type",
+        actions=get_button_actions("pause"),
+        channel=CHANNEL,
+        message=bad_message,
+        response_url="response_url",
+    )
+    data = {"payload": payload.model_dump_json()}
     response = client.post("blueiris_alerts/interactivity", data=data, headers=headers)
     assert response.status_code == 401
 
 
 # ---------------------------------------------------------------------------
-# Button type (non-livefeed) → exercises the else branch for value parsing
+# Button type (non-livefeed) -> exercises the else branch for value parsing
 # ---------------------------------------------------------------------------
+
 
 def test_slack_interactivity_button_type_action(client: TestClient, headers: dict, mocker: MockFixture):
     """Non-livefeed 'button' action uses payload.actions[0].value (else branch)."""
@@ -213,6 +239,7 @@ def test_slack_interactivity_button_type_action(client: TestClient, headers: dic
 # ---------------------------------------------------------------------------
 # Cancel-existing-task branches
 # ---------------------------------------------------------------------------
+
 
 def test_slack_interactivity_start_cancels_task(client: TestClient, headers: dict, mocker: MockFixture):
     """'start' action cancels an existing pause task in _pause_tasks."""

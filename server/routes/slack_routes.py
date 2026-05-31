@@ -3,12 +3,12 @@ import hashlib
 import hmac
 import time as _time
 import urllib.parse
-from typing import Annotated, Dict, Optional
+from typing import Annotated, Dict, Optional, Tuple
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request, Response
 from pydantic import Json
 
-from blueiris_alerts.schemas.slack_schema import SlackInteractivity
+from blueiris_alerts.schemas.slack_schema import ActionBlock, SlackInteractivity
 from blueiris_alerts.server.settings import SETTINGS, BI_LOGGER
 from blueiris_alerts.utils.key import encode
 from blueiris_alerts.server.slack.messages import response_url_post
@@ -19,6 +19,27 @@ router = APIRouter(prefix="/blueiris_alerts", tags=["slack"])
 
 # Maps camera short name to its running pause timer Task
 _pause_tasks: Dict[str, asyncio.Task] = {}
+
+
+def _extract_path_key(blocks) -> Tuple[Optional[str], Optional[str]]:
+    """Extract the alert path and HMAC key from the recording URL in blocks[1].
+
+    The recording URL has the form:
+        {server_url}/blueiris_alerts/clips?alert={path}&key={hmac}
+    It is set once when the alert is posted and never modified, so it is
+    the stable source of truth for authentication across all interactions.
+    """
+    try:
+        recording_block = blocks[1]
+        if not isinstance(recording_block, ActionBlock):
+            return None, None
+        url = recording_block.elements[0].url
+        if not url:
+            return None, None
+        params = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+        return params.get("alert", [None])[0], params.get("key", [None])[0]
+    except (IndexError, AttributeError):
+        return None, None
 
 
 def _verify_slack_signature(
@@ -83,8 +104,6 @@ async def _process_action(
                 payload.message.blocks,
                 camera,
                 camera_full,
-                button_selection[3],
-                button_selection[4],
                 payload.response_url,
             )
             assert payload.message.ts is not None
@@ -95,8 +114,6 @@ async def _process_action(
                     camera_full,
                     payload.channel.id,
                     int(button_selection[2]),
-                    button_selection[3],
-                    button_selection[4],
                     _pause_tasks,
                 )
             )
@@ -111,8 +128,6 @@ async def _process_action(
                 payload.message.blocks,
                 camera,
                 camera_full,
-                button_selection[3],
-                button_selection[4],
                 payload.response_url,
             )
             existing = _pause_tasks.pop(camera, None)
@@ -131,8 +146,6 @@ async def _process_action(
                 payload.message.blocks,
                 camera,
                 camera_full,
-                button_selection[3],
-                button_selection[4],
                 payload.response_url,
             )
             existing = _pause_tasks.pop(camera, None)
@@ -146,8 +159,6 @@ async def _process_action(
                     camera_full,
                     payload.channel.id,
                     int(button_selection[2]),
-                    button_selection[3],
-                    button_selection[4],
                     _pause_tasks,
                 )
             )
@@ -187,14 +198,16 @@ async def interactivity(
     assert camera is not None, "action_id is required"
     camera_full = button_selection[0]
 
-    if encode(SETTINGS.encryption_password, button_selection[3]) != button_selection[4]:
+    # Auth: verify the HMAC in the recording URL rather than the button value.
+    # The recording URL (blocks[1]) is signed at alert-send time and never changes.
+    path, key = _extract_path_key(payload.message.blocks)
+    if not path or not key or encode(SETTINGS.encryption_password, path) != key:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    # Return 200 to Slack immediately — Slack cancels interactions that take > 3 s.
-    # All slow work (BlueIris API, Slack response_url post) runs in the background.
     background_tasks.add_task(
         _process_action, payload, action, camera, camera_full, button_selection
     )
     return Response(status_code=200)
+
 
     return {"status": "success"}
