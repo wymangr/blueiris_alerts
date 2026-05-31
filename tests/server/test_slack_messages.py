@@ -1,5 +1,6 @@
 import pytest
 
+from fastapi import HTTPException
 from blueiris_alerts.server.slack import messages
 from tests.test_data import TEST_BLOCKS, ALERTING_CAMERA, PATH
 from blueiris_alerts.utils.config import get_settings
@@ -68,3 +69,19 @@ def test_update_blocks_pause():
         == f"Pause the {ALERTING_CAMERA} camera for another 30 min?"
     )
     assert START[4]["elements"][0]["placeholder"]["text"] == "Pause"
+
+
+def test_response_url_post_failure(setup_request_post, mocker):
+    """Non-200 response from Slack \u2192 HTTPException."""
+    mocker.patch("blueiris_alerts.server.slack.messages.update_blocks_pause", return_value=[])
+    setup_request_post.return_value.status_code = 500
+    with pytest.raises(HTTPException):
+        messages.response_url_post(
+            "pause",
+            TEST_BLOCKS,
+            ALERTING_CAMERA,
+            ALERTING_CAMERA,
+            PATH,
+            SETTINGS.encryption_password,
+            "https://response_url",
+        )

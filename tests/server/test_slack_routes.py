@@ -1,9 +1,17 @@
+import asyncio
+import hashlib
+import hmac as _hmac
+import time
+import urllib.parse
 import pytest
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pytest_mock import MockFixture
+from unittest.mock import AsyncMock, MagicMock
 
 from blueiris_alerts.server.app import app
+from blueiris_alerts.server.routes import slack_routes as routes_module
 from blueiris_alerts.utils.key import encode
 from blueiris_alerts.schemas import slack_schema
 from blueiris_alerts.utils.config import get_settings
@@ -30,6 +38,23 @@ def get_button_actions(button_action: str) -> list:
     ]
 
     return actions
+
+
+def get_button_action_button(button_action: str) -> list:
+    """Returns a 'button' type action (non-livefeed) to exercise the else branch."""
+    return [
+        {
+            "type": "button",
+            "text": {"text": "other"},
+            "value": f"camera,{button_action},1800,{test_data.PATH},{encode(SETTINGS.encryption_password, test_data.PATH)}",
+            "action_id": "camera",
+        }
+    ]
+
+
+def compute_slack_sig(secret: str, timestamp: str, body: str) -> str:
+    sig_base = f"v0:{timestamp}:{body}"
+    return "v0=" + _hmac.new(secret.encode(), sig_base.encode(), hashlib.sha256).hexdigest()
 
 
 def get_payload(actions: list) -> slack_schema.SlackInteractivity:
@@ -94,3 +119,140 @@ def test_slack_interactivity_pause(
             timer_mock.assert_called_once()
             create_task_mock.assert_called_once()
         assert response.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Slack signature verification
+# ---------------------------------------------------------------------------
+
+def test_slack_signature_valid(mocker: MockFixture):
+    """Correctly signed request → _verify_slack_signature returns without raising."""
+    secret = "test_signing_secret"
+    timestamp = str(int(time.time()))
+    body = "payload=test_body"
+    sig = compute_slack_sig(secret, timestamp, body)
+
+    mock_req = MagicMock()
+    mock_req.headers = {"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": sig}
+    mock_req.body = AsyncMock(return_value=body.encode())
+
+    mocker.patch.object(routes_module.SETTINGS, "slack_signing_secret", secret)
+    # Should not raise
+    asyncio.run(routes_module._verify_slack_signature(mock_req))
+
+
+def test_slack_signature_expired_timestamp(client: TestClient, headers: dict, mocker: MockFixture):
+    """Timestamp > 300s old → 401."""
+    mocker.patch.object(routes_module.SETTINGS, "slack_signing_secret", "test_secret")
+    old_ts = str(int(time.time()) - 400)
+    data = {"payload": get_payload(LIVEFEED_ACTIONS).model_dump_json()}
+    sig_headers = {**headers, "X-Slack-Request-Timestamp": old_ts, "X-Slack-Signature": "v0=invalid"}
+    response = client.post("blueiris_alerts/interactivity", data=data, headers=sig_headers)
+    assert response.status_code == 401
+
+
+def test_slack_signature_non_numeric_timestamp(client: TestClient, headers: dict, mocker: MockFixture):
+    """Non-numeric timestamp (ValueError) → 401."""
+    mocker.patch.object(routes_module.SETTINGS, "slack_signing_secret", "test_secret")
+    data = {"payload": get_payload(LIVEFEED_ACTIONS).model_dump_json()}
+    sig_headers = {**headers, "X-Slack-Request-Timestamp": "not_a_number", "X-Slack-Signature": "v0=invalid"}
+    response = client.post("blueiris_alerts/interactivity", data=data, headers=sig_headers)
+    assert response.status_code == 401
+
+
+def test_slack_signature_mismatch(mocker: MockFixture):
+    """Valid timestamp but wrong signature → HTTPException(401)."""
+    secret = "test_secret"
+    timestamp = str(int(time.time()))
+
+    mock_req = MagicMock()
+    mock_req.headers = {"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": "v0=wrongsignature"}
+    mock_req.body = AsyncMock(return_value=b"payload=test_body")
+
+    mocker.patch.object(routes_module.SETTINGS, "slack_signing_secret", secret)
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(routes_module._verify_slack_signature(mock_req))
+    assert exc_info.value.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Encryption check
+# ---------------------------------------------------------------------------
+
+def test_slack_interactivity_unauthorized(client: TestClient, headers: dict):
+    """Wrong encryption key in button value → 401."""
+    actions = [
+        {
+            "type": "static_select",
+            "text": {"text": "text"},
+            "selected_option": {
+                "text": {"text": "text"},
+                "value": f"camera,pause,1800,{test_data.PATH},WRONGKEY",
+            },
+            "action_id": "camera",
+        }
+    ]
+    data = {"payload": get_payload(actions).model_dump_json()}
+    response = client.post("blueiris_alerts/interactivity", data=data, headers=headers)
+    assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Button type (non-livefeed) → exercises the else branch for value parsing
+# ---------------------------------------------------------------------------
+
+def test_slack_interactivity_button_type_action(client: TestClient, headers: dict, mocker: MockFixture):
+    """Non-livefeed 'button' action uses payload.actions[0].value (else branch)."""
+    mocker.patch("blueiris_alerts.server.routes.slack_routes.pause")
+    mocker.patch("blueiris_alerts.server.routes.slack_routes.response_url_post")
+
+    data = {"payload": get_payload(get_button_action_button("start")).model_dump_json()}
+    response = client.post("blueiris_alerts/interactivity", data=data, headers=headers)
+    assert response.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Cancel-existing-task branches
+# ---------------------------------------------------------------------------
+
+def test_slack_interactivity_start_cancels_task(client: TestClient, headers: dict, mocker: MockFixture):
+    """'start' action cancels an existing pause task in _pause_tasks."""
+    mock_task = MagicMock(spec=asyncio.Task)
+    routes_module._pause_tasks["camera"] = mock_task
+    try:
+        mocker.patch("blueiris_alerts.server.routes.slack_routes.pause")
+        mocker.patch("blueiris_alerts.server.routes.slack_routes.response_url_post")
+
+        data = {"payload": get_payload(get_button_actions("start")).model_dump_json()}
+        response = client.post("blueiris_alerts/interactivity", data=data, headers=headers)
+
+        assert response.status_code == 200
+        mock_task.cancel.assert_called_once()
+    finally:
+        routes_module._pause_tasks.pop("camera", None)
+
+
+def test_slack_interactivity_add_cancels_task(client: TestClient, headers: dict, mocker: MockFixture):
+    """'add' action cancels existing pause task before creating a replacement."""
+    mock_task = MagicMock(spec=asyncio.Task)
+    routes_module._pause_tasks["camera"] = mock_task
+    try:
+        mocker.patch("blueiris_alerts.server.routes.slack_routes.pause")
+        mocker.patch("blueiris_alerts.server.routes.slack_routes.response_url_post")
+        mocker.patch("blueiris_alerts.server.routes.slack_routes.pause_timer_task")
+
+        def _close_coro(coro):
+            coro.close()
+
+        mocker.patch(
+            "blueiris_alerts.server.routes.slack_routes.asyncio.create_task",
+            side_effect=_close_coro,
+        )
+
+        data = {"payload": get_payload(get_button_actions("add")).model_dump_json()}
+        response = client.post("blueiris_alerts/interactivity", data=data, headers=headers)
+
+        assert response.status_code == 200
+        mock_task.cancel.assert_called_once()
+    finally:
+        routes_module._pause_tasks.pop("camera", None)
