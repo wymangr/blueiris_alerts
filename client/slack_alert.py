@@ -77,13 +77,15 @@ def get_cached_channel_id(slack_client: slack.WebClient):
     return channel_id
 
 
-def update_old(camera: str, slack_client: slack.WebClient):
+def update_old(camera: str, slack_client: slack.WebClient, before_ts: str | None = None):
     try:
         channel_id = get_cached_channel_id(slack_client)
         if not channel_id:
             print("unable to get channel id")
             return False
-        messages = cast(dict, slack_client.conversations_history(channel=channel_id, count=10).data)
+        messages = cast(dict, slack_client.conversations_history(
+            channel=channel_id, count=10, latest=before_ts
+        ).data)
         if not messages["ok"]:
             print("unable to update old messages")
             return False
@@ -257,8 +259,9 @@ if __name__ == "__main__":
     else:
         assert alert_path is not None, "--path is required"
 
+        cutoff = str(time.time())
         t = threading.Thread(
-            target=update_old, args=(alerting_camera, client), daemon=True
+            target=update_old, args=(alerting_camera, client, cutoff), daemon=True
         )
         t.start()
         send_alert(alerting_camera, alerting_camera_full, alert_path, client, memo)
