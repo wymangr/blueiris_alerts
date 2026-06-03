@@ -27,6 +27,7 @@ def _load_cache() -> dict:
         try:
             return json.loads(_CACHE_FILE.read_text())
         except Exception:
+            BI_LOGGER.error("Failed to read cache file", exc_info=True)
             return {}
     return {}
 
@@ -35,7 +36,7 @@ def _save_cache(data: dict):
     try:
         _CACHE_FILE.write_text(json.dumps(data))
     except Exception:
-        pass
+        BI_LOGGER.error("Failed to write cache file", exc_info=True)
 
 
 def watchdog_alert(camera: str, status: str, slack_client: slack.WebClient):
@@ -81,13 +82,13 @@ def update_old(camera: str, slack_client: slack.WebClient, before_ts: str | None
     try:
         channel_id = get_cached_channel_id(slack_client)
         if not channel_id:
-            print("unable to get channel id")
+            BI_LOGGER.error("update_old: unable to get channel id")
             return False
         messages = cast(dict, slack_client.conversations_history(
             channel=channel_id, count=10, latest=before_ts
         ).data)
         if not messages["ok"]:
-            print("unable to update old messages")
+            BI_LOGGER.error("update_old: conversations_history returned ok=false")
             return False
         removed_message_blocks = {}
         for message in messages["messages"]:
@@ -105,12 +106,12 @@ def update_old(camera: str, slack_client: slack.WebClient, before_ts: str | None
                             message["ts"]
                         ] = message_block.model_dump(exclude_none=True)
                 except ValidationError:
-                    print("Failed Validation")
+                    BI_LOGGER.warning("update_old: block validation failed, skipping message", exc_info=True)
                     continue
         remove_message_blocks(removed_message_blocks, channel_id, slack_client)
         return True
     except Exception as e:
-        print(e)
+        BI_LOGGER.error(f"update_old failed: {e}", exc_info=True)
         return False
 
 
