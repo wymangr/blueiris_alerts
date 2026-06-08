@@ -196,7 +196,7 @@ def send_alert(
         ]
     )
 
-    BI_LOGGER.debug(f"Message Blocks: {blocks.model_dump(exclude_none=True)}")
+    BI_LOGGER.debug("Message Blocks: %s", blocks.model_dump(exclude_none=True))
 
     slack_client.chat_postMessage(
         text=message_text,
@@ -266,4 +266,4 @@ if __name__ == "__main__":
         )
         t.start()
         send_alert(alerting_camera, alerting_camera_full, alert_path, client, memo)
-        t.join()
+        # update_old runs as a daemon thread; don't block exit on it.

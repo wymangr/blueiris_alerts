@@ -84,8 +84,15 @@ def get_payload(actions: list) -> slack_schema.SlackInteractivity:
 
 
 @pytest.fixture
-def client() -> TestClient:
-    return TestClient(app)
+def client():
+    # Bypass Slack signature verification for TestClient-based tests; the
+    # signature verification itself is exercised directly in the
+    # test_slack_signature_* tests below.
+    app.dependency_overrides[routes_module._verify_slack_signature] = lambda: None
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.pop(routes_module._verify_slack_signature, None)
 
 
 @pytest.fixture
@@ -165,22 +172,23 @@ def test_slack_signature_valid(mocker: MockFixture):
     routes_module._verify_slack_signature(mock_req, payload_str)
 
 
-def test_slack_signature_expired_timestamp(client: TestClient, headers: dict, mocker: MockFixture):
+def test_slack_signature_expired_timestamp(headers: dict, mocker: MockFixture):
     """Timestamp > 300s old -> 401."""
     mocker.patch.object(routes_module.SETTINGS, "slack_signing_secret", "test_secret")
     old_ts = str(int(time.time()) - 400)
     data = {"payload": get_payload(LIVEFEED_ACTIONS).model_dump_json()}
     sig_headers = {**headers, "X-Slack-Request-Timestamp": old_ts, "X-Slack-Signature": "v0=invalid"}
-    response = client.post("blueiris_alerts/interactivity", data=data, headers=sig_headers)
+    # Bypass the override in the `client` fixture; we want the real signature check.
+    response = TestClient(app).post("blueiris_alerts/interactivity", data=data, headers=sig_headers)
     assert response.status_code == 401
 
 
-def test_slack_signature_non_numeric_timestamp(client: TestClient, headers: dict, mocker: MockFixture):
+def test_slack_signature_non_numeric_timestamp(headers: dict, mocker: MockFixture):
     """Non-numeric timestamp (ValueError) -> 401."""
     mocker.patch.object(routes_module.SETTINGS, "slack_signing_secret", "test_secret")
     data = {"payload": get_payload(LIVEFEED_ACTIONS).model_dump_json()}
     sig_headers = {**headers, "X-Slack-Request-Timestamp": "not_a_number", "X-Slack-Signature": "v0=invalid"}
-    response = client.post("blueiris_alerts/interactivity", data=data, headers=sig_headers)
+    response = TestClient(app).post("blueiris_alerts/interactivity", data=data, headers=sig_headers)
     assert response.status_code == 401
 
 

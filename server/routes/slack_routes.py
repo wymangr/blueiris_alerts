@@ -56,15 +56,7 @@ def _verify_slack_signature(
     Reconstructs the raw body from the already-parsed Form field instead of
     calling request.body() (which would fail because the Form parser has
     already consumed the stream).
-
-    Skipped (with a warning) when SLACK_SIGNING_SECRET is not configured.
     """
-    if not SETTINGS.slack_signing_secret:
-        BI_LOGGER.warning(
-            "SLACK_SIGNING_SECRET not configured; skipping request signature verification"
-        )
-        return
-
     timestamp = request.headers.get("X-Slack-Request-Timestamp", "")
     signature = request.headers.get("X-Slack-Signature", "")
 
@@ -207,7 +199,9 @@ async def interactivity(
         not path
         or not expires
         or not key
-        or encode(SETTINGS.encryption_password, f"{path}:{expires}") != key
+        or not hmac.compare_digest(
+            encode(SETTINGS.encryption_password, f"{path}:{expires}"), key
+        )
     ):
         raise HTTPException(status_code=401, detail="Unauthorized")
 

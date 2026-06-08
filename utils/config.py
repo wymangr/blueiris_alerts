@@ -20,7 +20,7 @@ class ServerSettings(BaseSettings):
     blueiris_api_password: str
 
     slack_api_token: str
-    slack_signing_secret: Optional[str] = None
+    slack_signing_secret: str
 
     log_level: Optional[str] = "INFO"
 

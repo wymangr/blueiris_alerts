@@ -1,4 +1,5 @@
 import asyncio
+import hmac as _hmac
 import time as _time
 
 from fastapi import APIRouter, Header, HTTPException
@@ -21,7 +22,9 @@ def _check_auth(alert: str, expires: str, key: str) -> bool:
             return False
     except ValueError:
         return False
-    return encode(SETTINGS.encryption_password, f"{alert}:{expires}") == key
+    return _hmac.compare_digest(
+        encode(SETTINGS.encryption_password, f"{alert}:{expires}"), key
+    )
 
 
 def _is_slack_referer(referer: Optional[str]) -> bool:
