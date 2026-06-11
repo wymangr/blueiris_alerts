@@ -34,7 +34,7 @@ def test_update_old(mocker: MockFixture):
     slack_client_mock.conversations_history.return_value.data = test_messages
     slack_client_mock.return_value.chat_update
 
-    update_old = slack_alert.update_old("camera", slack_client_mock)
+    update_old = slack_alert.update_old("camera", slack_client_mock, before_ts="9999999999.0")
     assert update_old is True
 
 

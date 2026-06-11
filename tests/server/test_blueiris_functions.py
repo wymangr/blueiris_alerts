@@ -6,6 +6,7 @@ from blueiris_alerts.server.blueiris import (
     blueiris_camconfig,
     blueiris_clip,
 )
+from blueiris_alerts.utils.exceptions import BlueIrisError, BlueIrisAlertsException
 
 RESPONSE = {"result": "success", "session": "session"}
 
@@ -106,3 +107,42 @@ def test_gen_clip(mocker: MockFixture):
 def test_get_clip_images():
     test_clip_images = blueiris_clip.get_clip_images()
     assert test_clip_images == []
+
+
+# ---------------------------------------------------------------------------
+# Failure / error paths
+# ---------------------------------------------------------------------------
+
+def test_blueiris_api_login_failure(mocker):
+    """Failed login response raises BlueIrisError."""
+    session_post_mock = mocker.patch("requests.Session.post")
+    session_post_mock.return_value.status_code = 200
+    session_post_mock.return_value.json.return_value = {"result": "fail", "session": "session"}
+    with pytest.raises(BlueIrisError):
+        blueiris_api.blueiris_json_login()
+
+
+def test_blueiris_api_command_failure(mocker):
+    """Non-success command response raises BlueIrisError."""
+    import requests
+    session_post_mock = mocker.patch("requests.Session.post")
+    session_post_mock.return_value.status_code = 200
+    session_post_mock.return_value.json.return_value = {"result": "fail"}
+    session = requests.Session()
+    with pytest.raises(BlueIrisError):
+        blueiris_api.blueiris_command(session, "session_id", "cmd", "options")
+
+
+def test_blueiris_camconfig_invalid_duration():
+    """Unknown duration string raises BlueIrisAlertsException."""
+    with pytest.raises(BlueIrisAlertsException):
+        blueiris_camconfig.convert_pause_duration("invalid_duration")
+
+
+def test_blueiris_clip_not_found(mocker):
+    """Empty alert list raises BlueIrisError."""
+    api_mock = mocker.patch("blueiris_alerts.server.blueiris.blueiris_clip.blueiris_api")
+    api_mock.blueiris_json_login.return_value = ("session", "session_id")
+    api_mock.blueiris_command.return_value = {"data": []}
+    with pytest.raises(BlueIrisError):
+        blueiris_clip.get_clip("nonexistent.jpg")

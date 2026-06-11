@@ -1,3 +1,5 @@
+import time as _time
+
 from blueiris_alerts.schemas import slack_schema
 from blueiris_alerts.utils.config import get_settings
 from blueiris_alerts.utils.key import encode
@@ -5,11 +7,19 @@ from blueiris_alerts.utils.key import encode
 SETTINGS = get_settings("client")
 ALERTING_CAMERA = "CAMERA"
 PATH = "AB.20230101_000000.123456.1-1.jpg"
+EXPIRES = str(int(_time.time()) + 7 * 24 * 3600)  # 7-day expiry
+RECORDING_URL = f"https://server/blueiris_alerts/clips?alert={PATH}&expires={EXPIRES}&key={encode(SETTINGS.encryption_password, f'{PATH}:{EXPIRES}')}"
 
 TEST_BLOCKS = [
     slack_schema.DividerBlock(),
-    slack_schema.ContextBlock(
-        elements=[slack_schema.MarkdownElment(text="https://view_recording_link")]
+    slack_schema.ActionBlock(
+        elements=[
+            slack_schema.Elements(
+                type="button",
+                text=slack_schema.Text(text="View Recording", emoji=True),
+                url=RECORDING_URL,
+            )
+        ]
     ),
     slack_schema.ImageBlock(image_url="https://image_url", alt_text="alert"),
     slack_schema.SelectionBlock(
@@ -27,15 +37,15 @@ TEST_BLOCKS = [
                 options=[
                     slack_schema.Options(
                         text=slack_schema.Text(text="Pause 30m"),
-                        value=f"{ALERTING_CAMERA},pause,1800,{PATH},{encode(SETTINGS.encryption_password, PATH)}",
+                        value=f"{ALERTING_CAMERA},pause,1800",
                     ),
                     slack_schema.Options(
                         text=slack_schema.Text(text="Pause 1h"),
-                        value=f"{ALERTING_CAMERA},pause,3600,{PATH},{encode(SETTINGS.encryption_password, PATH)}",
+                        value=f"{ALERTING_CAMERA},pause,3600",
                     ),
                     slack_schema.Options(
                         text=slack_schema.Text(text="Pause 6h"),
-                        value=f"{ALERTING_CAMERA},pause,21600,{PATH},{encode(SETTINGS.encryption_password, PATH)}",
+                        value=f"{ALERTING_CAMERA},pause,21600",
                     ),
                 ],
             )

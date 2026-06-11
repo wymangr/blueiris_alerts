@@ -1,5 +1,6 @@
 import requests
 import hashlib
+from typing import Tuple
 
 from blueiris_alerts.server.settings import SETTINGS, BI_LOGGER
 from blueiris_alerts.utils.exceptions import BlueIrisError
@@ -12,7 +13,7 @@ def get_headers():
 def blueiris_json_login():
     BI_LOGGER.debug("Logging into Blueiris")
     session = requests.Session()
-    session.keep_alive = False
+    session.headers.update({"Connection": "close"})
 
     blueiris_url = f"{SETTINGS.blueiris_web_url}/json"
     headers = get_headers()
@@ -28,6 +29,7 @@ def blueiris_json_login():
         )
     ).hexdigest()
 
+
     login_data = f'{{"cmd":"login","session":"{session_id}","response":"{response}"}}'
     login = session.post(blueiris_url, headers=headers, data=login_data)
 
@@ -39,7 +41,7 @@ def blueiris_json_login():
     raise BlueIrisError("Failed to login to Blue Iris")
 
 
-def blueiris_json_logout(session: requests.Session(), session_id: str):
+def blueiris_json_logout(session: requests.Session, session_id: str):
     BI_LOGGER.debug("Logging out of BlueIris")
     blueiris_url = f"{SETTINGS.blueiris_web_url}/json"
     headers = get_headers()
@@ -48,7 +50,7 @@ def blueiris_json_logout(session: requests.Session(), session_id: str):
 
 
 def blueiris_command(
-    session: requests.Session(), session_id: str, command: str, additional_options: str
+    session: requests.Session, session_id: str, command: str, additional_options: str
 ):
     BI_LOGGER.debug(
         f"blueiris_command - session_id: {session_id}, command: {command}, additional_options: {additional_options}"

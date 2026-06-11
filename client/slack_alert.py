@@ -1,8 +1,13 @@
 import argparse
+import json
+import pathlib
+import threading
+import time
+from typing import Any, cast
 import slack_sdk as slack
 
 from pydantic import ValidationError
-from datetime import datetime
+# from datetime import datetime
 
 from blueiris_alerts.utils.config import get_settings
 from blueiris_alerts.utils.logger import Logger
@@ -13,6 +18,25 @@ from blueiris_alerts.schemas import slack_schema
 SETTINGS = get_settings("client")
 logger = Logger(SETTINGS.log_level)
 BI_LOGGER = logger.get_logger()
+
+_CACHE_FILE = pathlib.Path.home() / ".blueiris_alerts_cache.json"
+
+
+def _load_cache() -> dict:
+    if _CACHE_FILE.exists():
+        try:
+            return json.loads(_CACHE_FILE.read_text())
+        except Exception:
+            BI_LOGGER.error("Failed to read cache file", exc_info=True)
+            return {}
+    return {}
+
+
+def _save_cache(data: dict):
+    try:
+        _CACHE_FILE.write_text(json.dumps(data))
+    except Exception:
+        BI_LOGGER.error("Failed to write cache file", exc_info=True)
 
 
 def watchdog_alert(camera: str, status: str, slack_client: slack.WebClient):
@@ -35,7 +59,7 @@ def remove_message_blocks(
             )
 
 
-def get_channel_id(channels: dict):
+def get_channel_id(channels: Any) -> str | None:
     channel_id = None
     for c in channels["channels"]:
         if c["name"] == SETTINGS.slack_channel:
@@ -43,37 +67,51 @@ def get_channel_id(channels: dict):
     return channel_id
 
 
-def update_old(camera: str, slack_client: slack.WebClient):
+def get_cached_channel_id(slack_client: slack.WebClient):
+    cache = _load_cache()
+    if "channel_id" in cache:
+        return cache["channel_id"]
+    channels = slack_client.conversations_list()
+    channel_id = get_channel_id(channels)
+    if channel_id:
+        _save_cache({"channel_id": channel_id})
+    return channel_id
+
+
+def update_old(camera: str, slack_client: slack.WebClient, before_ts: str | None = None):
     try:
-        channels = slack_client.conversations_list()
-        channel_id = get_channel_id(channels)
+        channel_id = get_cached_channel_id(slack_client)
         if not channel_id:
-            print("unable to get channel id")
+            BI_LOGGER.error("update_old: unable to get channel id")
             return False
-        messages = slack_client.conversations_history(channel=channel_id, count=10).data
+        messages = cast(dict, slack_client.conversations_history(
+            channel=channel_id, count=10, latest=before_ts
+        ).data)
         if not messages["ok"]:
-            print("unable to update old messages")
+            BI_LOGGER.error("update_old: conversations_history returned ok=false")
             return False
         removed_message_blocks = {}
         for message in messages["messages"]:
             if "blocks" in message.keys() and len(message["blocks"]) == 7:
                 try:
                     message_block = slack_schema.MessageSchema(blocks=message["blocks"])
+                    block = message_block.blocks[4]
                     if (
-                        message_block.blocks[4].elements[0].action_id == camera
-                        and message_block.blocks[4].elements[0].placeholder.text
-                        == "Pause"
+                        isinstance(block, slack_schema.ActionBlock)
+                        and block.elements[0].action_id == camera
+                        and block.elements[0].placeholder is not None
+                        and block.elements[0].placeholder.text == "Pause"
                     ):
                         removed_message_blocks[
                             message["ts"]
-                        ] = message_block.model_dump()
+                        ] = message_block.model_dump(exclude_none=True)
                 except ValidationError:
-                    print("Failed Validation")
+                    BI_LOGGER.warning("update_old: block validation failed, skipping message", exc_info=True)
                     continue
         remove_message_blocks(removed_message_blocks, channel_id, slack_client)
         return True
     except Exception as e:
-        print(e)
+        BI_LOGGER.error(f"update_old failed: {e}", exc_info=True)
         return False
 
 
@@ -93,10 +131,12 @@ def send_alert(
         f"/file/clips/{path}",
     )
 
-    now = datetime.now().strftime("%m/%d/%Y %I:%M:%S %p")
-    recording_url = f"{SETTINGS.server_url}/blueiris_alerts/clips?alert={path}&key={encode(SETTINGS.encryption_password, path)}"
+    # now = datetime.now().strftime("%m/%d/%Y %I:%M:%S %p")
+    expires = str(int(time.time()) + 7 * 24 * 3600)  # URLs valid for 7 days
+    _key = encode(SETTINGS.encryption_password, f"{path}:{expires}")
+    recording_url = f"{SETTINGS.server_url}/blueiris_alerts/clips?alert={path}&expires={expires}&key={_key}"
     # view_recording_link = f"<{recording_url}|```View Recording```>{now}"
-    live_feed_url = f"{SETTINGS.server_url}/blueiris_alerts/live_feed?alert={path}&camera={camera}&key={encode(SETTINGS.encryption_password, path)}"
+    live_feed_url = f"{SETTINGS.server_url}/blueiris_alerts/live_feed?alert={path}&camera={camera}&expires={expires}&key={_key}"
 
     blocks = slack_schema.MessageSchema(
         blocks=[
@@ -129,15 +169,15 @@ def send_alert(
                         options=[
                             slack_schema.Options(
                                 text=slack_schema.Text(text="Pause 30m"),
-                                value=f"{alerting_camera},pause,1800,{path},{encode(SETTINGS.encryption_password, path)}",
+                                value=f"{alerting_camera},pause,1800",
                             ),
                             slack_schema.Options(
                                 text=slack_schema.Text(text="Pause 1h"),
-                                value=f"{alerting_camera},pause,3600,{path},{encode(SETTINGS.encryption_password, path)}",
+                                value=f"{alerting_camera},pause,3600",
                             ),
                             slack_schema.Options(
                                 text=slack_schema.Text(text="Pause 6h"),
-                                value=f"{alerting_camera},pause,21600,{path},{encode(SETTINGS.encryption_password, path)}",
+                                value=f"{alerting_camera},pause,21600",
                             ),
                         ],
                     )
@@ -156,7 +196,7 @@ def send_alert(
         ]
     )
 
-    BI_LOGGER.debug(f"Message Blocks: {blocks.model_dump(exclude_none=True)}")
+    BI_LOGGER.debug("Message Blocks: %s", blocks.model_dump(exclude_none=True))
 
     slack_client.chat_postMessage(
         text=message_text,
@@ -220,5 +260,10 @@ if __name__ == "__main__":
     else:
         assert alert_path is not None, "--path is required"
 
-        update_old(alerting_camera, client)
+        cutoff = str(time.time())
+        t = threading.Thread(
+            target=update_old, args=(alerting_camera, client, cutoff), daemon=True
+        )
+        t.start()
         send_alert(alerting_camera, alerting_camera_full, alert_path, client, memo)
+        # update_old runs as a daemon thread; don't block exit on it.

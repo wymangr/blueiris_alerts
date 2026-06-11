@@ -9,7 +9,7 @@ from blueiris_alerts.utils.config import get_settings
 from blueiris_alerts.tests import test_data
 
 SETTINGS = get_settings("server")
-REFERER = "android-app://com.slack/"
+SLACK_REFERER = "android-app://com.slack/"
 BAD_REFERER = "https://badreferer"
 
 
@@ -20,7 +20,7 @@ def client() -> TestClient:
 
 @pytest.fixture
 def headers() -> dict:
-    return {"referer": REFERER}
+    return {"referer": SLACK_REFERER}
 
 
 @pytest.fixture
@@ -30,7 +30,7 @@ def badheaders() -> dict:
 
 @pytest.fixture
 def key() -> str:
-    return encode(SETTINGS.encryption_password, test_data.PATH)
+    return encode(SETTINGS.encryption_password, f"{test_data.PATH}:{test_data.EXPIRES}")
 
 
 def mock_clip_content():
@@ -45,7 +45,7 @@ def test_clips(client: TestClient, headers: dict, key: str, mocker: MockFixture)
     )
     get_clip_mock.return_value = mock_clip_content()
 
-    path = f"/blueiris_alerts/clips?alert={test_data.PATH}&key={key}"
+    path = f"/blueiris_alerts/clips?alert={test_data.PATH}&expires={test_data.EXPIRES}&key={key}"
     response = client.get(path, headers=headers)
 
     get_clip_mock.assert_called_once()
@@ -59,7 +59,7 @@ def test_live_feed(client: TestClient, headers: dict, key: str, mocker: MockFixt
     )
     get_blueiris_auth_url_mock.return_value = live_feed_redirect_url
 
-    path = f"/blueiris_alerts/live_feed?alert={test_data.PATH}&key={key}&camera=test"
+    path = f"/blueiris_alerts/live_feed?alert={test_data.PATH}&camera=test&expires={test_data.EXPIRES}&key={key}"
     response = client.get(path, headers=headers)
 
     get_blueiris_auth_url_mock.assert_called_once()
@@ -71,28 +71,52 @@ def test_clips_bad_ref(
     badheaders: dict,
     key: str,
 ):
-    path = f"/blueiris_alerts/clips?alert={test_data.PATH}&key={key}"
+    path = f"/blueiris_alerts/clips?alert={test_data.PATH}&expires={test_data.EXPIRES}&key={key}"
     response = client.get(path, headers=badheaders)
 
     assert response.status_code == 401
 
 
 def test_live_feed_bad_ref(client: TestClient, badheaders: dict, key: str):
-    path = f"/blueiris_alerts/live_feed?alert={test_data.PATH}&key={key}&camera=test"
+    path = f"/blueiris_alerts/live_feed?alert={test_data.PATH}&camera=test&expires={test_data.EXPIRES}&key={key}"
     response = client.get(path, headers=badheaders)
 
     assert response.status_code == 401
 
 
 def test_clips_bad_key(client: TestClient, headers: dict):
-    path = f"/blueiris_alerts/clips?alert={test_data.PATH}&key=w6TDhsOmw6fDq8OUw6XDmA=="
+    path = f"/blueiris_alerts/clips?alert={test_data.PATH}&expires={test_data.EXPIRES}&key=w6TDhsOmw6fDq8OUw6XDmA=="
     response = client.get(path, headers=headers)
 
     assert response.status_code == 401
 
 
 def test_live_feed_bad_key(client: TestClient, headers: dict):
-    path = f"/blueiris_alerts/clips?alert={test_data.PATH}&key=w6TDhsOmw6fDq8OUw6XDmA=="
+    path = f"/blueiris_alerts/clips?alert={test_data.PATH}&expires={test_data.EXPIRES}&key=w6TDhsOmw6fDq8OUw6XDmA=="
+    response = client.get(path, headers=headers)
+
+    assert response.status_code == 401
+
+
+def test_clips_no_referer(client: TestClient, key: str, mocker: MockFixture):
+    """No Referer header (desktop/iOS Slack) should be allowed."""
+    get_clip_mock = mocker.patch(
+        "blueiris_alerts.server.routes.blueiris_routes.get_clip"
+    )
+    get_clip_mock.return_value = mock_clip_content()
+
+    path = f"/blueiris_alerts/clips?alert={test_data.PATH}&expires={test_data.EXPIRES}&key={key}"
+    response = client.get(path)  # no headers
+
+    get_clip_mock.assert_called_once()
+    assert response.status_code == 200
+
+
+def test_clips_expired(client: TestClient, headers: dict):
+    """Expired URL should be rejected."""
+    expired_ts = str(int(__import__('time').time()) - 1)
+    expired_key = encode(SETTINGS.encryption_password, f"{test_data.PATH}:{expired_ts}")
+    path = f"/blueiris_alerts/clips?alert={test_data.PATH}&expires={expired_ts}&key={expired_key}"
     response = client.get(path, headers=headers)
 
     assert response.status_code == 401
